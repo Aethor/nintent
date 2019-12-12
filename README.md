@@ -7,4 +7,10 @@ Welcome to the **nintent** project !
 
 * Download the dataset here : http://fb.me/semanticparsingdialog 
 * place it under "datas"
-* unzip it.
+* unzip it
+
+
+## Getting SpanBERT
+
+The `setup.sh` script will download SpanBERT and place it under the *models* 
+directory for you.
