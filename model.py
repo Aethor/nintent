@@ -5,7 +5,6 @@ from transformers import BertModel
 class SpanEncoder(torch.nn.Module):
     def __init__(self):
         super(SpanEncoder, self).__init__()
-        # TODO: include spanbert
         self.bert_encoder = BertModel.from_pretrained("models/spanbert")
         self.hidden_size = self.bert_encoder.config.hidden_size
 
