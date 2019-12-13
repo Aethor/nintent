@@ -1,7 +1,0 @@
-{
-    "epochs_nb": {
-        "type": "int",
-        "default": 5,
-        "help": "Number of epochs"
-    }
-}
