@@ -1,7 +1,7 @@
 from typing import Optional
 
 import torch
-from transformers import BertModel
+from transformers import BertModel, BertTokenizer
 
 from tree import IntentTree, Intent, Slot
 
@@ -63,7 +63,9 @@ class TreeMaker(torch.nn.Module):
             self.span_encoder.hidden_size, len(list(Slot.slot_types))
         )
 
-    def forward(self, tokens: torch.Tensor) -> (IntentTree, float):
+    def forward(
+        self, tokens: torch.Tensor, tokenizer: BertTokenizer
+    ) -> (IntentTree, float):
         """
         :param tokens: (batch_size?, seq_size)
         """
@@ -91,8 +93,9 @@ class TreeMaker(torch.nn.Module):
         max_slot = torch.max(self.slot_selector(selectors_input), 1)
         slot_type = Slot.slot_types[max_slot.indices[0].item()]
 
-        # TODO: tokens input
-        cur_tree = IntentTree(None, (intent_type, slot_type))
+        cur_tree = IntentTree(
+            tokenizer.decode([t.item() for t in tokens[0]]), (intent_type, slot_type)
+        )
         label_score = max_intent.values[0].item() + max_slot.value[0].item()
 
         if tokens.shape[1] == 1:
