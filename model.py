@@ -1,5 +1,9 @@
+from typing import Optional
+
 import torch
 from transformers import BertModel
+
+from tree import IntentTree, Intent, Slot
 
 
 class SpanEncoder(torch.nn.Module):
@@ -16,10 +20,10 @@ class SpanEncoder(torch.nn.Module):
         return self.bert_encoder(seqs)
 
 
-class SpanSelector(torch.nn.Module):
+class SpanScorer(torch.nn.Module):
     def __init__(self, hidden_size: int):
-        super(SpanSelector, self).__init__()
-        self.selector = torch.nn.Linear(2 * hidden_size, 1)
+        super(SpanScorer, self).__init__()
+        self.scorer = torch.nn.Linear(2 * hidden_size, 1)
 
     def forward(self, spans_repr: torch.Tensor) -> torch.Tensor:
         """
@@ -29,7 +33,7 @@ class SpanSelector(torch.nn.Module):
         # (batch_size, spans_nb, 2 * hidden_size)
         flat_spans = torch.flatten(spans_repr, start_dim=2)
 
-        return self.selector(flat_spans).squeeze()
+        return torch.softmax(self.scorer(flat_spans).squeeze(), dim=1)
 
 
 class LabelSelector(torch.nn.Module):
@@ -39,28 +43,78 @@ class LabelSelector(torch.nn.Module):
 
     def forward(self, spans_repr: torch.Tensor) -> torch.Tensor:
         """
-        :param spans_repr: (batch_size, spans_nb, 2, hidden_size)
-        :return:           (batch_size, spans_nbs, labels_nb)
+        :param spans_repr: (batch_size, 2, hidden_size)
+        :return:           (batch_size, labels_nb)
         """
         # (batch_size, spans_nb, 2 * hidden_size)
-        flat_spans = torch.flatten(spans_repr, start_dim=2)
-        return self.selector(flat_spans)
+        flat_spans = torch.flatten(spans_repr, start_dim=1)
+        return torch.softmax(self.selector(flat_spans), dim=1)
 
 
-# TODO: research tree structure
-class TreeScorer(torch.nn.Module):
-    def __init__(self, labels_nb: int):
-        super(TreeScorer, self).__init__()
+class TreeMaker(torch.nn.Module):
+    def __init__(self):
+        super(TreeMaker, self).__init__()
         self.span_encoder = SpanEncoder()
-        self.span_selector = SpanSelector(self.span_encoder.hidden_size)
-        self.label_selector = LabelSelector(self.span_encoder.hidden_size, labels_nb)
+        self.span_scorer = SpanScorer(self.span_encoder.hidden_size)
+        self.intent_selector = LabelSelector(
+            self.span_encoder.hidden_size, len(list(Intent.intent_types))
+        )
+        self.slot_selector = LabelSelector(
+            self.span_encoder.hidden_size, len(list(Slot.slot_types))
+        )
 
-    def forward(self, span: torch.Tensor, split: int):
+    def forward(self, tokens: torch.Tensor) -> (IntentTree, float):
         """
-        :param span: (batch_size, seq_size, hidden_size)
+        :param tokens: (batch_size?, seq_size)
         """
-        if span.shape[1] == 1:
-            span_repr = torch.cat((span[:, 0, :], span[:, 0, :]))
-            return torch.softmax(self.label_selector(span_repr))
-        span_repr = torch.cat((span[:, 0, :], span[:, -1, :]))
-        return torch.softmax(self.label_selector(span_repr))
+        if tokens.shape[1] == 0:
+            raise Exception(
+                f"[error] len(tokens) must be > 0 (current : {len(tokens)})"
+            )
+
+        # (batch_size?, seq_size, hidden_size)
+        # TODO: optimize by not calling at each level
+        tokens_repr = self.span_encoder(tokens)
+
+        if tokens.shape[1] == 1:
+            selectors_input = torch.cat(
+                (tokens_repr[:, 0, :], tokens_repr[:, 0, :]), dim=1
+            )
+        else:
+            selectors_input = torch.cat(
+                (tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1
+            )
+
+        max_intent = torch.max(self.intent_selector(selectors_input), 1)
+        intent_type = Intent.intent_types[max_intent.indices[0].item()]
+
+        max_slot = torch.max(self.slot_selector(selectors_input), 1)
+        slot_type = Slot.slot_types[max_slot.indices[0].item()]
+
+        # TODO: tokens input
+        cur_tree = IntentTree(None, (intent_type, slot_type))
+        label_score = max_intent.values[0].item() + max_slot.value[0].item()
+
+        if tokens.shape[1] == 1:
+            return (cur_tree, label_score)
+
+        span_score = self.span_encoder(tokens)
+
+        max_split_score = -1
+        max_split_children: Optional[list] = None
+        for i in range(tokens.shape[1] - 1):  # for all splits
+            lsplit, rsplit = (tokens[:, :i], tokens[:, i:])
+            ltree, lscore = self(lsplit)
+            rtree, rscore = self(rsplit)
+
+            if lscore + rscore > max_split_score:
+                max_split_score = lscore + rscore
+                max_split_children = [ltree, rtree]
+
+        assert not max_split_children is None
+
+        for child in max_split_children:
+            cur_tree.add_child(child)
+
+        return (cur_tree, label_score + span_score + max_split_score)
+
