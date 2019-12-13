@@ -1,4 +1,5 @@
-from typing import Union, Tuple, Optional
+from __future__ import annotations
+from typing import Union, Tuple, Optional, List
 
 
 class Intent:
@@ -34,10 +35,14 @@ class Intent:
     def __init__(self, intent_type: Union[str, int]):
         if isinstance(intent_type, int):
             self.type = Intent.intent_types[intent_type]
-        elif intent_type in Intent.intent_types:
-            self.type = {v: k for k, v in Intent.intent_types}[intent_type]
         else:
-            raise Exception(f"[error] Invalid intent type {intent_type}")
+            try:
+                self.type = {v: k for k, v in Intent.intent_types.items()}[intent_type]
+            except KeyError:
+                raise Exception(f"Invalid intent type {intent_type}")
+
+    def __str__(self):
+        return Intent.intent_types[self.type]
 
 
 class Slot:
@@ -84,10 +89,14 @@ class Slot:
     def __init__(self, slot_type: Union[str, int]):
         if isinstance(slot_type, int):
             self.type = Slot.slot_types[slot_type]
-        elif slot_type in Slot.slot_types:
-            self.type = {v: k for k, v in Slot.slot_types}[slot_type]
         else:
-            raise Exception(f"[error] Invalid slot type {slot_type}")
+            try:
+                self.type = {v: k for k, v in Slot.slot_types.items()}[slot_type]
+            except KeyError:
+                raise Exception(f"Invalid slot type {slot_type}")
+
+    def __str__(self):
+        return Slot.slot_types[self.type]
 
 
 class IntentTree:
@@ -98,3 +107,36 @@ class IntentTree:
 
     def add_child(self, child: IntentTree):
         self.children.append(child)
+
+    @classmethod
+    def from_str(self, sent: str) -> IntentTree:
+        stack: List[IntentTree] = []
+
+        for token in sent.split():
+
+            if token.startswith("["):
+                label, typ = token[1:].split(":")
+                if label == "IN":
+                    stack.append(IntentTree("", (Intent(typ))))
+                elif label == "SL":
+                    stack.append(IntentTree("", (Slot(typ))))
+                else:
+                    raise Exception(f"Unknown node type : {label}")
+                if len(stack) >= 2:
+                    stack[-2].add_child(stack[-1])
+
+            elif token.startswith("]"):
+                last_popped = stack.pop()
+
+            else:
+                for node in stack:
+                    node.tokens += f" {token}"
+
+        return last_popped
+
+    def __str__(self, level: int = 0):
+        offset = "  " * level
+        string = offset + "+ {} : {}\n".format(str(self.node_type), self.tokens)
+        for child in self.children:
+            string += child.__str__(level=level + 1)
+        return string
