@@ -6,8 +6,8 @@ Welcome to the **nintent** project !
 ## Getting the dataset
 
 * Download the dataset here : http://fb.me/semanticparsingdialog 
-* place it under "datas"
 * unzip it
+* place every file under the main directory under "datas"
 
 
 ## Getting SpanBERT
