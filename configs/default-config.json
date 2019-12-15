@@ -1,3 +1,4 @@
 {
-    "epochs_nb": 5
+    "epochs_nb": 5,
+    "batch_size": 1
 }

@@ -4,103 +4,127 @@ from typing import Union, Tuple, Optional, List
 
 class Intent:
     intent_types = {
-        1: "NOT_INTENT",
-        2: "COMBINE",
-        3: "GET_EVENT_ATTENDEE_AMOUNT",
-        4: "GET_EVENT",
-        5: "NEGATION",
-        6: "GET_LOCATION_SCHOOL",
-        7: "GET_DIRECTIONS",
-        8: "GET_ESTIMATED_DEPARTURE",
-        9: "GET_LOCATION_HOME",
-        10: "GET_ESTIMATED_DURATION",
-        11: "GET_INFO_TRAFFIC",
-        12: "UNSUPPORTED_EVENT",
-        13: "GET_ESTIMATED_ARRIVAL",
-        14: "GET_INFO_ROUTE",
-        15: "GET_LOCATION_WORK",
-        16: "UNSUPPORTED_NAVIGATION",
-        17: "GET_EVENT_ATTENDEE",
-        18: "UNSUPPORTED",
-        19: "GET_LOCATION_HOMETOWN",
-        20: "GET_DISTANCE",
-        21: "GET_EVENT_ORGANIZER",
-        22: "UPDATE_DIRECTIONS",
-        23: "UNINTELLIGIBLE",
-        24: "GET_LOCATION",
-        25: "GET_INFO_ROAD_CONDITION",
-        26: "GET_CONTACT",
+        0: "NOT_INTENT",
+        1: "COMBINE",
+        2: "GET_EVENT_ATTENDEE_AMOUNT",
+        3: "GET_EVENT",
+        4: "NEGATION",
+        5: "GET_LOCATION_SCHOOL",
+        6: "GET_DIRECTIONS",
+        7: "GET_ESTIMATED_DEPARTURE",
+        8: "GET_LOCATION_HOME",
+        9: "GET_ESTIMATED_DURATION",
+        10: "GET_INFO_TRAFFIC",
+        11: "UNSUPPORTED_EVENT",
+        12: "GET_ESTIMATED_ARRIVAL",
+        13: "GET_INFO_ROUTE",
+        14: "GET_LOCATION_WORK",
+        15: "UNSUPPORTED_NAVIGATION",
+        16: "GET_EVENT_ATTENDEE",
+        17: "UNSUPPORTED",
+        18: "GET_LOCATION_HOMETOWN",
+        19: "GET_DISTANCE",
+        20: "GET_EVENT_ORGANIZER",
+        21: "UPDATE_DIRECTIONS",
+        22: "UNINTELLIGIBLE",
+        23: "GET_LOCATION",
+        24: "GET_INFO_ROAD_CONDITION",
+        25: "GET_CONTACT",
     }
 
     def __init__(self, intent_type: Union[str, int]):
         if isinstance(intent_type, int):
-            self.type = Intent.intent_types[intent_type]
+            self.type = Intent.itos(intent_type)
         else:
-            try:
-                self.type = {v: k for k, v in Intent.intent_types.items()}[intent_type]
-            except KeyError:
-                raise Exception(f"Invalid intent type {intent_type}")
+            if not intent_type in {v: k for k, v in Intent.intent_types.items()}:
+                raise KeyError(f"Invalid intent type {intent_type}")
+            self.type = intent_type
+
+    @classmethod
+    def itos(cls, i: int):
+        return Intent.intent_types[i]
+
+    @classmethod
+    def stoi(cls, s: str):
+        return {v: k for k, v in Intent.intent_types.items()}[s]
+
+    def __eq__(self, other: Intent):
+        if not isinstance(other, Intent):
+            return False
+        return other.type == self.type
 
     def __str__(self):
-        return Intent.intent_types[self.type]
+        return "INTENT : " + Intent.intent_types[self.type]
 
 
 class Slot:
     slot_types = {
-        1: "NOT_SLOT",
-        2: "WAYPOINT_AVOID",
-        3: "COMBINE",
-        4: "ROAD_CONDITION_AVOID",
-        5: "CONTACT",
-        6: "PATH_AVOID",
-        7: "TYPE_RELATION",
-        8: "LOCATION_CURRENT",
-        9: "AMOUNT",
-        10: "NAME_EVENT",
-        11: "DATE_TIME",
-        12: "DATE_TIME_ARRIVAL",
-        13: "DATE_TIME_DEPARTURE",
-        14: "SEARCH_RADIUS",
-        15: "OBSTRUCTION_AVOID",
-        16: "POINT_ON_MAP",
-        17: "GROUP",
-        18: "SOURCE",
-        19: "DESTINATION",
-        20: "CATEGORY_LOCATION",
-        21: "METHOD_TRAVEL",
-        22: "ORDINAL",
-        23: "OBSTRUCTION",
-        24: "CONTACT_RELATED",
-        25: "UNIT_DISTANCE",
-        26: "ATTRIBUTE_EVENT",
-        27: "WAYPOINT",
-        28: "LOCATION_USER",
-        29: "LOCATION",
-        30: "ATTENDEE_EVENT",
-        31: "ORGANIZER_EVENT",
-        32: "ROAD_CONDITION",
-        33: "PATH",
-        34: "LOCATION_MODIFIER",
-        35: "LOCATION_WORK",
-        36: "WAYPOINT_ADDED",
-        37: "CATEGORY_EVENT",
+        0: "NOT_SLOT",
+        1: "WAYPOINT_AVOID",
+        2: "COMBINE",
+        3: "ROAD_CONDITION_AVOID",
+        4: "CONTACT",
+        5: "PATH_AVOID",
+        6: "TYPE_RELATION",
+        7: "LOCATION_CURRENT",
+        8: "AMOUNT",
+        9: "NAME_EVENT",
+        10: "DATE_TIME",
+        11: "DATE_TIME_ARRIVAL",
+        12: "DATE_TIME_DEPARTURE",
+        13: "SEARCH_RADIUS",
+        14: "OBSTRUCTION_AVOID",
+        15: "POINT_ON_MAP",
+        16: "GROUP",
+        17: "SOURCE",
+        18: "DESTINATION",
+        19: "CATEGORY_LOCATION",
+        20: "METHOD_TRAVEL",
+        21: "ORDINAL",
+        22: "OBSTRUCTION",
+        23: "CONTACT_RELATED",
+        24: "UNIT_DISTANCE",
+        25: "ATTRIBUTE_EVENT",
+        26: "WAYPOINT",
+        27: "LOCATION_USER",
+        28: "LOCATION",
+        29: "ATTENDEE_EVENT",
+        30: "ORGANIZER_EVENT",
+        31: "ROAD_CONDITION",
+        32: "PATH",
+        33: "LOCATION_MODIFIER",
+        34: "LOCATION_WORK",
+        35: "WAYPOINT_ADDED",
+        36: "CATEGORY_EVENT",
     }
 
     def __init__(self, slot_type: Union[str, int]):
         if isinstance(slot_type, int):
-            self.type = Slot.slot_types[slot_type]
+            self.type = Slot.itos(slot_type)
         else:
-            try:
-                self.type = {v: k for k, v in Slot.slot_types.items()}[slot_type]
-            except KeyError:
-                raise Exception(f"Invalid slot type {slot_type}")
+            if not slot_type in {v: k for k, v in Slot.slot_types.items()}:
+                raise KeyError(f"Invalid slot type {slot_type}")
+            self.type = slot_type
+
+    @classmethod
+    def itos(cls, i: int):
+        return Slot.slot_types[i]
+
+    @classmethod
+    def stoi(cls, s: str):
+        return {v: k for k, v in Slot.slot_types.items()}[s]
+
+    def __eq__(self, other: Slot):
+        if not isinstance(other, Slot):
+            return False
+        return other.type == self.type
 
     def __str__(self):
-        return Slot.slot_types[self.type]
+        return "SLOT : " + Slot.slot_types[self.type]
 
 
 class IntentTree:
-    def __init__(self, tokens: str, node_type: Tuple[Union[Intent, Slot]]):
+    def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
         self.tokens = tokens
         self.node_type = node_type
         self.children = []
@@ -117,9 +141,9 @@ class IntentTree:
             if token.startswith("["):
                 label, typ = token[1:].split(":")
                 if label == "IN":
-                    stack.append(IntentTree("", (Intent(typ))))
+                    stack.append(IntentTree("", Intent(typ)))
                 elif label == "SL":
-                    stack.append(IntentTree("", (Slot(typ))))
+                    stack.append(IntentTree("", Slot(typ)))
                 else:
                     raise Exception(f"Unknown node type : {label}")
                 if len(stack) >= 2:
@@ -134,9 +158,21 @@ class IntentTree:
 
         return last_popped
 
+    def __eq__(self, other: IntentTree):
+        if not isinstance(other, IntentTree):
+            return False
+        if len(self.children) != len(other.children):
+            return False
+        if len(self.children) == 0 and len(other.children) == 0:
+            return self.tokens == other.tokens and self.node_type == other.node_type
+        for child, other_child in zip(self.children, other.children):
+            if child != other_child:
+                return False
+        return True
+
     def __str__(self, level: int = 0):
         offset = "  " * level
-        string = offset + "+ {} : {}\n".format(str(self.node_type), self.tokens)
+        string = offset + "+ {} | {}\n".format(str(self.node_type), self.tokens)
         for child in self.children:
             string += child.__str__(level=level + 1)
         return string

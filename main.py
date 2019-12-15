@@ -5,6 +5,7 @@ import torch
 from torch.optim.optimizer import Optimizer
 from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import _LRScheduler
+from transformers import BertTokenizer
 from tqdm import tqdm
 
 from tree import IntentTree
@@ -13,31 +14,48 @@ from config import Config
 from model import TreeMaker
 
 
-# TODO: batches
+def hinge_loss(
+    pred_tree: IntentTree,
+    pred_score: torch.Tensor,
+    target_tree: IntentTree,
+    target_score: torch.Tensor,
+) -> torch.Tensor:
+    if pred_tree == target_tree:
+        return torch.tensor([0])
+    return torch.max(torch.tensor([0, 1 - target_score + pred_score]))
+
+
 def train_(
     model: TreeMaker,
-    batches,
+    dataset: Dataset,
     device: torch.device,
     optimizer: Optimizer,
     scheduler: Optional[_LRScheduler],
-    loss_fn: _Loss,
+    tokenizer: BertTokenizer,
     epochs_nb: int,
+    batch_size: int,
 ):
     model.train()
     model.to(device)
-
-    batches_progress = tqdm(batches)
 
     for epoch in range(epochs_nb):
 
         mean_loss_list = []
 
-        for batch in batches_progress:
+        batches_progress = tqdm(
+            dataset.batches(batch_size), total=dataset.batches_nb(batch_size)
+        )
+
+        # TODO: only possible batch size is 1
+        for sequences, target_trees in batches_progress:
             optimizer.zero_grad()
+            sequences = sequences.to(device)
 
-            pred = model(batch.X)  # TODO: batch mockup
+            pred_tree, pred_score = model(sequences, tokenizer)
+            target_score = model.score_tree(target_trees[0], tokenizer)
 
-            loss = loss_fn(pred, batch.y)  # TODO: batch mockup
+            loss = hinge_loss(pred_tree, pred_score, target_trees[0], target_score)
+
             loss.backward()
             optimizer.step()
 
@@ -67,6 +85,13 @@ if __name__ == "__main__":
         help="Number of epochs",
     )
     arg_parser.add_argument(
+        "-bz",
+        "--batch-size",
+        type=int,
+        default=config["batch_size"],
+        help="Size of batches",
+    )
+    arg_parser.add_argument(
         "-cf",
         "--config-file",
         type=str,
@@ -79,4 +104,19 @@ if __name__ == "__main__":
     else:
         config.update_(vars(args))
 
-    dataset = Dataset.from_file("./datas/train.tsv")
+    tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+    dataset = Dataset.from_file("./datas/train.tsv", tokenizer)
+    model = TreeMaker()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    optimizer = torch.optim.Adam(model.parameters())
+
+    train_(
+        model,
+        dataset,
+        device,
+        optimizer,
+        None,  # scheduler,
+        tokenizer,
+        config["epochs_nb"],
+        config["batch_size"],
+    )
