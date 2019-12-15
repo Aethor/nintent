@@ -109,7 +109,7 @@ class IntentTree:
         self.children.append(child)
 
     @classmethod
-    def from_str(self, sent: str) -> IntentTree:
+    def from_str(cls, sent: str) -> IntentTree:
         stack: List[IntentTree] = []
 
         for token in sent.split():

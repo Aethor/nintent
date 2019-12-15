@@ -8,6 +8,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 from tqdm import tqdm
 
 from tree import IntentTree
+from datas import Dataset
 from config import Config
 from model import TreeMaker
 
@@ -56,7 +57,7 @@ def train_(
 
 
 if __name__ == "__main__":
-    config = Config("./datas/default-config.json")
+    config = Config("./configs/default-config.json")
     arg_parser = argparse.ArgumentParser(argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument(
         "-en",
@@ -65,13 +66,17 @@ if __name__ == "__main__":
         default=config["epochs_nb"],
         help="Number of epochs",
     )
+    arg_parser.add_argument(
+        "-cf",
+        "--config-file",
+        type=str,
+        default=None,
+        help="Config file overriding the default-config.json default config",
+    )
     args = arg_parser.parse_args()
     if args.config_file:
         config.load_from_file_(args.config_file)
     else:
         config.update_(vars(args))
 
-    trees = []
-    with open("./datas/train.tsv") as train_file:
-        for line in train_file:
-            trees.append(IntentTree.from_str(line.split("\t")[-1]))
+    dataset = Dataset.from_file("./datas/train.tsv")
