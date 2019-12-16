@@ -21,8 +21,10 @@ def hinge_loss(
     target_score: torch.Tensor,
 ) -> torch.Tensor:
     if pred_tree == target_tree:
-        return torch.tensor([0])
-    return torch.max(torch.tensor([0, 1 - target_score + pred_score]))
+        return 0 * pred_score * target_score
+    if (1 - target_score + pred_score).item() <= 0:
+        return 0 * pred_score * target_score
+    return 1 - target_score + pred_score
 
 
 def train_(

@@ -32,7 +32,7 @@ class SpanScorer(torch.nn.Module):
         """
         # (batch_size, spans_nb, 2 * hidden_size)
         flat_spans = torch.flatten(spans_repr, start_dim=1).float()
-        return self.scorer(flat_spans)
+        return torch.sigmoid(self.scorer(flat_spans))
 
 
 class LabelSelector(torch.nn.Module):
@@ -94,7 +94,7 @@ class TreeMaker(torch.nn.Module):
         slot_type = Slot.slot_types[max_slot.indices[0].item()]
 
         node_text = self.tokenizer.decode([t.item() for t in tokens[0]])
-        label_score = max_intent.values[0].item() + max_slot.values[0].item()
+        label_score = max_intent.values[0].item() + max_slot.values[0]
 
         if intent_type == "NOT_INTENT" and slot_type == "NOT_INTENT":
             cur_tree = IntentTree(node_text, None)
@@ -111,7 +111,7 @@ class TreeMaker(torch.nn.Module):
         if tokens.shape[1] == 1:
             return (cur_tree, label_score)
 
-        span_score = self.span_scorer(tokens_repr)[0][0].item()
+        span_score = self.span_scorer(tokens_repr)[0][0]
 
         max_split_score = -1
         max_split_children: Optional[list] = None
