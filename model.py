@@ -51,8 +51,9 @@ class LabelSelector(torch.nn.Module):
 
 
 class TreeMaker(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, tokenizer: BertTokenizer):
         super(TreeMaker, self).__init__()
+        self.tokenizer = tokenizer
         self.span_encoder = SpanEncoder()
         self.span_scorer = SpanScorer(self.span_encoder.hidden_size)
         self.intent_selector = LabelSelector(
@@ -63,19 +64,24 @@ class TreeMaker(torch.nn.Module):
         )
 
     def forward(
-        self, tokens: torch.Tensor, tokenizer: BertTokenizer
+        self, tokens: torch.Tensor, encoded_tokens: Optional[torch.Tensor] = None
     ) -> (IntentTree, float):
         """
         :param tokens: (batch_size?, seq_size)
+        :param encoded_tokens: (batch_size?, seq_size, hidden_size)
         """
         if tokens.shape[1] == 0:
             raise Exception(
                 f"[error] len(tokens) must be > 0 (tokens shape : {tokens.shape})"
             )
+        if not encoded_tokens is None and encoded_tokens.shape[1] == 0:
+            raise Exception(
+                f"[error] len(encoded_tokens) must be > 0 (encoded_tokens shape : {encoded_tokens.shape})"
+            )
 
         # (batch_size?, seq_size, hidden_size)
-        # TODO: optimize by not calling at each level
-        encoded_tokens = self.span_encoder(tokens)
+        if encoded_tokens is None:
+            encoded_tokens = self.span_encoder(tokens)
 
         tokens_repr = torch.cat(
             (encoded_tokens[:, 0, :], encoded_tokens[:, -1, :]), dim=1
@@ -87,7 +93,7 @@ class TreeMaker(torch.nn.Module):
         max_slot = torch.max(self.slot_selector(tokens_repr), 1)
         slot_type = Slot.slot_types[max_slot.indices[0].item()]
 
-        node_text = tokenizer.decode([t.item() for t in tokens[0]])
+        node_text = self.tokenizer.decode([t.item() for t in tokens[0]])
         label_score = max_intent.values[0].item() + max_slot.values[0].item()
 
         if intent_type == "NOT_INTENT" and slot_type == "NOT_INTENT":
@@ -110,10 +116,8 @@ class TreeMaker(torch.nn.Module):
         max_split_score = -1
         max_split_children: Optional[list] = None
         for i in range(tokens.shape[1] - 1):  # for all splits
-            lsplit, rsplit = (tokens[:, : i + 1], tokens[:, i + 1 :])
-
-            ltree, lscore = self(lsplit, tokenizer)
-            rtree, rscore = self(rsplit, tokenizer)
+            ltree, lscore = self(tokens[:, : i + 1], encoded_tokens[:, : i + 1, :])
+            rtree, rscore = self(tokens[:, i + 1 :], encoded_tokens[:, i + 1 :, :])
 
             if lscore + rscore > max_split_score:
                 max_split_score = lscore + rscore
@@ -126,8 +130,10 @@ class TreeMaker(torch.nn.Module):
 
         return (cur_tree, label_score + span_score + max_split_score)
 
-    def score_tree(self, tree: IntentTree, tokenizer: BertTokenizer) -> torch.Tensor:
-        tokens_repr = self.span_encoder(torch.tensor(tokenizer.encode(tree.tokens)))
+    def score_tree(self, tree: IntentTree) -> torch.Tensor:
+        tokens_repr = self.span_encoder(
+            torch.tensor(self.tokenizer.encode(tree.tokens)).unsqueeze(0)
+        )
         span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
         span_score = self.span_scorer(span_repr)
 
@@ -140,11 +146,13 @@ class TreeMaker(torch.nn.Module):
                 * self.slot_selector(span_repr)[Slot.stoi("NOT_SLOT")]
             )
         elif isinstance(tree.node_type, Intent):
-            label_score = self.intent_selector(span_repr)[
+            label_score = self.intent_selector(span_repr)[0][
                 Intent.stoi(tree.node_type.type)
             ]
         elif isinstance(tree.node_type, Slot):
-            label_score = self.slot_selector(span_repr)[Slot.stoi(tree.node_type.type)]
+            label_score = self.slot_selector(span_repr)[0][
+                Slot.stoi(tree.node_type.type)
+            ]
 
         children_scores = torch.zeros(len(tree.children))
         for i, child in enumerate(tree.children):

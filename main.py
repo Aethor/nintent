@@ -31,7 +31,6 @@ def train_(
     device: torch.device,
     optimizer: Optimizer,
     scheduler: Optional[_LRScheduler],
-    tokenizer: BertTokenizer,
     epochs_nb: int,
     batch_size: int,
 ):
@@ -51,8 +50,8 @@ def train_(
             optimizer.zero_grad()
             sequences = sequences.to(device)
 
-            pred_tree, pred_score = model(sequences, tokenizer)
-            target_score = model.score_tree(target_trees[0], tokenizer)
+            pred_tree, pred_score = model(sequences)
+            target_score = model.score_tree(target_trees[0])
 
             loss = hinge_loss(pred_tree, pred_score, target_trees[0], target_score)
 
@@ -106,7 +105,7 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     dataset = Dataset.from_file("./datas/train.tsv", tokenizer)
-    model = TreeMaker()
+    model = TreeMaker(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     optimizer = torch.optim.Adam(model.parameters())
 
@@ -116,7 +115,6 @@ if __name__ == "__main__":
         device,
         optimizer,
         None,  # scheduler,
-        tokenizer,
         config["epochs_nb"],
         config["batch_size"],
     )
