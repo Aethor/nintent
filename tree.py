@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union, Tuple, Optional, List, Type, Mapping
+from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
 
 
 class Intent:
@@ -131,15 +131,19 @@ class Slot:
 
 class IntentTree:
 
-    node_types: Mapping[int, Type] = {0: Intent, 1: Slot}
+    node_types: Mapping[int, Optional[Type]] = {0: None, 1: Intent, 2: Slot}
 
-    def __init__(self, tokens: str, node_type: Union[Intent, Slot]):
+    def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
         self.tokens = tokens
         self.node_type = node_type
         self.children = []
 
-    def add_child(self, child: IntentTree):
+    def add_child_(self, child: IntentTree):
         self.children.append(child)
+
+    def add_children_(self, children: Iterable[IntentTree]):
+        for child in children:
+            self.add_child_(child)
 
     def is_leaf(self) -> bool:
         return len(self.children) == 0
@@ -159,7 +163,7 @@ class IntentTree:
                 else:
                     raise Exception(f"Unknown node type : {label}")
                 if len(stack) >= 2:
-                    stack[-2].add_child(stack[-1])
+                    stack[-2].add_child_(stack[-1])
 
             elif token.startswith("]"):
                 last_popped = stack.pop()

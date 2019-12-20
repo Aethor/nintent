@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Tuple
 
 import torch
 from transformers import BertModel, BertTokenizer
@@ -73,7 +73,7 @@ class TreeScorer(torch.nn.Module):
         """
         # (batch_size, seq_size, hidden_size)
         tokens_repr = self.span_encoder(
-            torch.tensor(self.tokenizer.encode(tree.tokens)).unsqueeze(0)
+            torch.tensor(self.tokenizer.encode(tree.tokens))
         )
         # (batch_size, 2, hidden_size)
         span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
@@ -94,6 +94,8 @@ class TreeScorer(torch.nn.Module):
                 Slot.stoi(tree.node_type)
             ]
             intent_type_score = torch.tensor(0)
+        else:
+            raise Exception("unknown node type")
 
         is_terminal_score = self.is_terminal_selector(span_repr)[
             1 if tree.is_leaf() else 0
@@ -112,8 +114,50 @@ class TreeScorer(torch.nn.Module):
             + children_score
         )
 
-    def make_tree_(self, tree: IntentTree):
-        tokens_repr = self.span_encoder(
-            torch.tensor(self.tokenizer.encode(tree.tokens)).unsqueeze(0)
-        )
-        # TODO:
+    # TODO: enforce that level 0 should be an intent
+    # TODO: enforce tree correctness ??
+    def make_tree(self, tokens: torch.Tensor) -> IntentTree:
+        """
+        :param tokens: (batch_size, seq_size)
+        :note: only works with batch size equals to 1
+        """
+        # (batch_size, seq_size, hidden_size)
+        tokens_repr = self.span_encoder(torch.tensor(tokens))
+        # (batch_size, 2, hidden_size)
+        span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
+
+        node_type = IntentTree.node_types[
+            torch.max(self.node_type_selector(span_repr), 1).indices.item()
+        ]
+
+        if node_type == Intent:
+            node_type_type = Intent.itos(
+                torch.max(self.intent_type_selector(span_repr), 1).indices.item()
+            )
+        elif node_type == Slot:
+            node_type_type = Slot.itos(
+                torch.max(self.slot_type_selector(span_repr), 1).indices.item()
+            )
+        elif node_type is None:
+            node_type_type = None
+
+        cur_tree = IntentTree(self.tokenizer.decode(tokens), node_type_type)
+
+        # Check if the current tree should be terminal
+        if (
+            torch.max(self.is_terminal_selector(span_repr), 1).indices.item() == 1
+            or len(tokens) == 1
+        ):
+            return cur_tree
+
+        children: List[Tuple[IntentTree]] = []
+        for i in range(tokens.shape[1] - 1):
+            ltree = self.make_tree(tokens[:, : i + 1])
+            rtree = self.make_tree(tokens[:, i + 1 :])
+            children.append((ltree, rtree))
+
+        best_children_pair = max(children, key=lambda e: self(e[0]) + self(e[1]))
+
+        cur_tree.add_children_(best_children_pair)
+
+        return cur_tree
