@@ -11,24 +11,17 @@ from tqdm import tqdm
 from tree import IntentTree
 from datas import Dataset
 from config import Config
-from model import TreeMaker
+from model import TreeScorer
 
 
-def hinge_loss(
-    pred_tree: IntentTree,
-    pred_score: torch.Tensor,
-    target_tree: IntentTree,
-    target_score: torch.Tensor,
-) -> torch.Tensor:
-    if pred_tree == target_tree:
-        return 0 * pred_score * target_score
+def hinge_loss(pred_score: torch.Tensor, target_score: torch.Tensor) -> torch.Tensor:
     if (1 - target_score + pred_score).item() <= 0:
         return 0 * pred_score * target_score
     return 1 - target_score + pred_score
 
 
 def train_(
-    model: TreeMaker,
+    model: TreeScorer,
     dataset: Dataset,
     device: torch.device,
     optimizer: Optimizer,
@@ -52,15 +45,26 @@ def train_(
             optimizer.zero_grad()
             sequences = sequences.to(device)
 
-            pred_tree, pred_score = model(sequences)
-            target_score = model.score_tree(target_trees[0])
+            with torch.no_grad():
+                model.eval()
+                pred_tree = model.make_tree(sequences)
+            model.train()
 
-            loss = hinge_loss(pred_tree, pred_score, target_trees[0], target_score)
+            if pred_tree == target_trees[0]:
+                continue
+
+            target_score = model(target_trees[0], device)
+            pred_score = model(pred_tree, device)
+
+            loss = hinge_loss(pred_score, target_score)
 
             loss.backward()
             optimizer.step()
 
-            batches_progress.set_description(f"[epoch:{epoch + 1}][loss:{loss.item()}]")
+            if loss.item() != 0.0:
+                batches_progress.set_description(
+                    "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss.item())
+                )
             mean_loss_list.append(loss.item())
 
         if len(mean_loss_list) > 0:
@@ -107,7 +111,7 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     dataset = Dataset.from_file("./datas/train.tsv", tokenizer)
-    model = TreeMaker(tokenizer)
+    model = TreeScorer(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     optimizer = torch.optim.Adam(model.parameters())
 

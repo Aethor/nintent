@@ -1,35 +1,34 @@
 from __future__ import annotations
-from typing import Union, Tuple, Optional, List
+from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
 
 
 class Intent:
-    intent_types = {
-        0: "NOT_INTENT",
-        1: "COMBINE",
-        2: "GET_EVENT_ATTENDEE_AMOUNT",
-        3: "GET_EVENT",
-        4: "NEGATION",
-        5: "GET_LOCATION_SCHOOL",
-        6: "GET_DIRECTIONS",
-        7: "GET_ESTIMATED_DEPARTURE",
-        8: "GET_LOCATION_HOME",
-        9: "GET_ESTIMATED_DURATION",
-        10: "GET_INFO_TRAFFIC",
-        11: "UNSUPPORTED_EVENT",
-        12: "GET_ESTIMATED_ARRIVAL",
-        13: "GET_INFO_ROUTE",
-        14: "GET_LOCATION_WORK",
-        15: "UNSUPPORTED_NAVIGATION",
-        16: "GET_EVENT_ATTENDEE",
-        17: "UNSUPPORTED",
-        18: "GET_LOCATION_HOMETOWN",
-        19: "GET_DISTANCE",
-        20: "GET_EVENT_ORGANIZER",
-        21: "UPDATE_DIRECTIONS",
-        22: "UNINTELLIGIBLE",
-        23: "GET_LOCATION",
-        24: "GET_INFO_ROAD_CONDITION",
-        25: "GET_CONTACT",
+    intent_types: Mapping[int, str] = {
+        0: "COMBINE",
+        1: "GET_EVENT_ATTENDEE_AMOUNT",
+        2: "GET_EVENT",
+        3: "NEGATION",
+        4: "GET_LOCATION_SCHOOL",
+        5: "GET_DIRECTIONS",
+        6: "GET_ESTIMATED_DEPARTURE",
+        7: "GET_LOCATION_HOME",
+        8: "GET_ESTIMATED_DURATION",
+        9: "GET_INFO_TRAFFIC",
+        10: "UNSUPPORTED_EVENT",
+        11: "GET_ESTIMATED_ARRIVAL",
+        12: "GET_INFO_ROUTE",
+        13: "GET_LOCATION_WORK",
+        14: "UNSUPPORTED_NAVIGATION",
+        15: "GET_EVENT_ATTENDEE",
+        16: "UNSUPPORTED",
+        17: "GET_LOCATION_HOMETOWN",
+        18: "GET_DISTANCE",
+        19: "GET_EVENT_ORGANIZER",
+        20: "UPDATE_DIRECTIONS",
+        21: "UNINTELLIGIBLE",
+        22: "GET_LOCATION",
+        23: "GET_INFO_ROAD_CONDITION",
+        24: "GET_CONTACT",
     }
 
     def __init__(self, intent_type: Union[str, int]):
@@ -48,54 +47,57 @@ class Intent:
     def stoi(cls, s: str):
         return {v: k for k, v in Intent.intent_types.items()}[s]
 
+    @classmethod
+    def intent_types_nb(cls) -> int:
+        return len(list(cls.intent_types))
+
     def __eq__(self, other: Intent):
         if not isinstance(other, Intent):
             return False
         return other.type == self.type
 
     def __str__(self):
-        return "INTENT : " + Intent.intent_types[self.type]
+        return "INTENT : " + self.type
 
 
 class Slot:
-    slot_types = {
-        0: "NOT_SLOT",
-        1: "WAYPOINT_AVOID",
-        2: "COMBINE",
-        3: "ROAD_CONDITION_AVOID",
-        4: "CONTACT",
-        5: "PATH_AVOID",
-        6: "TYPE_RELATION",
-        7: "LOCATION_CURRENT",
-        8: "AMOUNT",
-        9: "NAME_EVENT",
-        10: "DATE_TIME",
-        11: "DATE_TIME_ARRIVAL",
-        12: "DATE_TIME_DEPARTURE",
-        13: "SEARCH_RADIUS",
-        14: "OBSTRUCTION_AVOID",
-        15: "POINT_ON_MAP",
-        16: "GROUP",
-        17: "SOURCE",
-        18: "DESTINATION",
-        19: "CATEGORY_LOCATION",
-        20: "METHOD_TRAVEL",
-        21: "ORDINAL",
-        22: "OBSTRUCTION",
-        23: "CONTACT_RELATED",
-        24: "UNIT_DISTANCE",
-        25: "ATTRIBUTE_EVENT",
-        26: "WAYPOINT",
-        27: "LOCATION_USER",
-        28: "LOCATION",
-        29: "ATTENDEE_EVENT",
-        30: "ORGANIZER_EVENT",
-        31: "ROAD_CONDITION",
-        32: "PATH",
-        33: "LOCATION_MODIFIER",
-        34: "LOCATION_WORK",
-        35: "WAYPOINT_ADDED",
-        36: "CATEGORY_EVENT",
+    slot_types: Mapping[int, str] = {
+        0: "WAYPOINT_AVOID",
+        1: "COMBINE",
+        2: "ROAD_CONDITION_AVOID",
+        3: "CONTACT",
+        4: "PATH_AVOID",
+        5: "TYPE_RELATION",
+        6: "LOCATION_CURRENT",
+        7: "AMOUNT",
+        8: "NAME_EVENT",
+        9: "DATE_TIME",
+        10: "DATE_TIME_ARRIVAL",
+        11: "DATE_TIME_DEPARTURE",
+        12: "SEARCH_RADIUS",
+        13: "OBSTRUCTION_AVOID",
+        14: "POINT_ON_MAP",
+        15: "GROUP",
+        16: "SOURCE",
+        17: "DESTINATION",
+        18: "CATEGORY_LOCATION",
+        19: "METHOD_TRAVEL",
+        20: "ORDINAL",
+        21: "OBSTRUCTION",
+        22: "CONTACT_RELATED",
+        23: "UNIT_DISTANCE",
+        24: "ATTRIBUTE_EVENT",
+        25: "WAYPOINT",
+        26: "LOCATION_USER",
+        27: "LOCATION",
+        28: "ATTENDEE_EVENT",
+        29: "ORGANIZER_EVENT",
+        30: "ROAD_CONDITION",
+        31: "PATH",
+        32: "LOCATION_MODIFIER",
+        33: "LOCATION_WORK",
+        34: "WAYPOINT_ADDED",
+        35: "CATEGORY_EVENT",
     }
 
     def __init__(self, slot_type: Union[str, int]):
@@ -114,23 +116,37 @@ class Slot:
     def stoi(cls, s: str):
         return {v: k for k, v in Slot.slot_types.items()}[s]
 
+    @classmethod
+    def slot_types_nb(cls) -> int:
+        return len(list(cls.slot_types))
+
     def __eq__(self, other: Slot):
         if not isinstance(other, Slot):
             return False
         return other.type == self.type
 
     def __str__(self):
-        return "SLOT : " + Slot.slot_types[self.type]
+        return "SLOT : " + self.type
 
 
 class IntentTree:
+
+    node_types: Mapping[int, Optional[Type]] = {0: None, 1: Intent, 2: Slot}
+
     def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
         self.tokens = tokens
         self.node_type = node_type
         self.children = []
 
-    def add_child(self, child: IntentTree):
+    def add_child_(self, child: IntentTree):
         self.children.append(child)
+
+    def add_children_(self, children: Iterable[IntentTree]):
+        for child in children:
+            self.add_child_(child)
+
+    def is_leaf(self) -> bool:
+        return len(self.children) == 0
 
     @classmethod
     def from_str(cls, sent: str) -> IntentTree:
@@ -147,7 +163,7 @@ class IntentTree:
                 else:
                     raise Exception(f"Unknown node type : {label}")
                 if len(stack) >= 2:
-                    stack[-2].add_child(stack[-1])
+                    stack[-2].add_child_(stack[-1])
 
             elif token.startswith("]"):
                 last_popped = stack.pop()
@@ -158,7 +174,7 @@ class IntentTree:
 
         return last_popped
 
-    def __eq__(self, other: IntentTree):
+    def __eq__(self, other: IntentTree) -> bool:
         if not isinstance(other, IntentTree):
             return False
         if len(self.children) != len(other.children):
@@ -170,9 +186,17 @@ class IntentTree:
                 return False
         return True
 
-    def __str__(self, level: int = 0):
+    def __str__(self, level: int = 0) -> str:
         offset = "  " * level
         string = offset + "+ {} | {}\n".format(str(self.node_type), self.tokens)
         for child in self.children:
             string += child.__str__(level=level + 1)
         return string
+
+    @classmethod
+    def node_types_idx(cls, ntype: Type) -> int:
+        return {v: k for k, v in cls.node_types.items()}[ntype]
+
+    @classmethod
+    def node_types_nb(cls) -> int:
+        return len(list(cls.node_types))
