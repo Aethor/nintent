@@ -57,7 +57,7 @@ class Intent:
         return other.type == self.type
 
     def __str__(self):
-        return "INTENT : " + Intent.intent_types[self.type]
+        return "INTENT : " + self.type
 
 
 class Slot:
@@ -126,7 +126,7 @@ class Slot:
         return other.type == self.type
 
     def __str__(self):
-        return "SLOT : " + Slot.slot_types[self.type]
+        return "SLOT : " + self.type
 
 
 class IntentTree:

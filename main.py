@@ -53,15 +53,18 @@ def train_(
             if pred_tree == target_trees[0]:
                 continue
 
-            target_score = model(target_trees[0])
-            pred_score = model(pred_tree)
+            target_score = model(target_trees[0], device)
+            pred_score = model(pred_tree, device)
 
             loss = hinge_loss(pred_score, target_score)
 
             loss.backward()
             optimizer.step()
 
-            batches_progress.set_description(f"[epoch:{epoch + 1}][loss:{loss.item()}]")
+            if loss.item() != 0.0:
+                batches_progress.set_description(
+                    "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss.item())
+                )
             mean_loss_list.append(loss.item())
 
         if len(mean_loss_list) > 0:
