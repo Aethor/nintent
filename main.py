@@ -47,9 +47,10 @@ def train_(
 
             with torch.no_grad():
                 model.eval()
-                print(sequences)
                 pred_tree = model.make_tree(sequences)
             model.train()
+            print("[debug]")
+            print(pred_tree)
 
             if pred_tree == target_trees[0]:
                 continue

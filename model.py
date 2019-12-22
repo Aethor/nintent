@@ -152,7 +152,7 @@ class TreeScorer(torch.nn.Module):
         # Check if the current tree should be terminal
         if (
             torch.max(self.is_terminal_selector(span_repr), 1).indices.item() == 1
-            or len(tokens) == 1
+            or len(tokens[0]) == 1
         ):
             return cur_tree
 
@@ -162,7 +162,10 @@ class TreeScorer(torch.nn.Module):
             rtree = self.make_tree(tokens[:, i + 1 :])
             children.append((ltree, rtree))
 
-        best_children_pair = max(children, key=lambda e: self(e[0]) + self(e[1]))
+        best_children_pair = max(
+            children,
+            key=lambda e: self(e[0], tokens.device) + self(e[1], tokens.device),
+        )
 
         cur_tree.add_children_(best_children_pair)
 
