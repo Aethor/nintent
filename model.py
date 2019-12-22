@@ -137,7 +137,7 @@ class TreeScorer(torch.nn.Module):
             torch.max(self.node_type_selector(span_repr), 1).indices.item()
         ]
 
-        decoded_tokens = self.tokenizer.decode(tokens)
+        decoded_tokens = self.tokenizer.decode([t.item() for t in tokens[0]])
         if node_type == Intent:
             intent_type = torch.max(
                 self.intent_type_selector(span_repr), 1
