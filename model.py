@@ -123,13 +123,17 @@ class TreeScorer(torch.nn.Module):
 
     # TODO: enforce that level 0 should be an intent
     # TODO: enforce tree correctness ??
-    def make_tree(self, tokens: torch.Tensor) -> IntentTree:
+    def make_tree(
+        self, tokens: torch.Tensor, tokens_repr: Optional[torch.Tensor]
+    ) -> IntentTree:
         """
         :param tokens: (batch_size, seq_size)
+        :span_repr:    (batch_size, seq_size, hidden_size)
         :note: only works with batch size equals to 1
         """
-        # (batch_size, seq_size, hidden_size)
-        tokens_repr = self.span_encoder(tokens)
+        if tokens_repr is None:
+            # (batch_size, seq_size, hidden_size)
+            tokens_repr = self.span_encoder(tokens)
         # (batch_size, 2, hidden_size)
         span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
 
@@ -158,8 +162,8 @@ class TreeScorer(torch.nn.Module):
 
         children: List[Tuple[IntentTree]] = []
         for i in range(tokens.shape[1] - 1):
-            ltree = self.make_tree(tokens[:, : i + 1])
-            rtree = self.make_tree(tokens[:, i + 1 :])
+            ltree = self.make_tree(tokens[:, : i + 1], tokens_repr[:, : i + 1, :])
+            rtree = self.make_tree(tokens[:, i + 1 :], tokens_repr[:, i + 1 :, :])
             children.append((ltree, rtree))
 
         best_children_pair = max(

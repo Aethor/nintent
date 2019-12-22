@@ -1,3 +1,8 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+
 import argparse
 from typing import Optional
 
@@ -47,7 +52,7 @@ def train_(
 
             with torch.no_grad():
                 model.eval()
-                pred_tree = model.make_tree(sequences)
+                pred_tree = model.make_tree(sequences, None)
             model.train()
             print("[debug]")
             print(pred_tree)
