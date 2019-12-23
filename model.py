@@ -123,13 +123,17 @@ class TreeScorer(torch.nn.Module):
 
     # TODO: enforce that level 0 should be an intent
     # TODO: enforce tree correctness ??
-    def make_tree(self, tokens: torch.Tensor) -> IntentTree:
+    def make_tree(
+        self, tokens: torch.Tensor, tokens_repr: Optional[torch.Tensor]
+    ) -> IntentTree:
         """
         :param tokens: (batch_size, seq_size)
+        :span_repr:    (batch_size, seq_size, hidden_size)
         :note: only works with batch size equals to 1
         """
-        # (batch_size, seq_size, hidden_size)
-        tokens_repr = self.span_encoder(tokens)
+        if tokens_repr is None:
+            # (batch_size, seq_size, hidden_size)
+            tokens_repr = self.span_encoder(tokens)
         # (batch_size, 2, hidden_size)
         span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
 
@@ -137,7 +141,7 @@ class TreeScorer(torch.nn.Module):
             torch.max(self.node_type_selector(span_repr), 1).indices.item()
         ]
 
-        decoded_tokens = self.tokenizer.decode(tokens)
+        decoded_tokens = self.tokenizer.decode([t.item() for t in tokens[0]])
         if node_type == Intent:
             intent_type = torch.max(
                 self.intent_type_selector(span_repr), 1
@@ -152,17 +156,20 @@ class TreeScorer(torch.nn.Module):
         # Check if the current tree should be terminal
         if (
             torch.max(self.is_terminal_selector(span_repr), 1).indices.item() == 1
-            or len(tokens) == 1
+            or len(tokens[0]) == 1
         ):
             return cur_tree
 
         children: List[Tuple[IntentTree]] = []
         for i in range(tokens.shape[1] - 1):
-            ltree = self.make_tree(tokens[:, : i + 1])
-            rtree = self.make_tree(tokens[:, i + 1 :])
+            ltree = self.make_tree(tokens[:, : i + 1], tokens_repr[:, : i + 1, :])
+            rtree = self.make_tree(tokens[:, i + 1 :], tokens_repr[:, i + 1 :, :])
             children.append((ltree, rtree))
 
-        best_children_pair = max(children, key=lambda e: self(e[0]) + self(e[1]))
+        best_children_pair = max(
+            children,
+            key=lambda e: self(e[0], tokens.device) + self(e[1], tokens.device),
+        )
 
         cur_tree.add_children_(best_children_pair)
 
