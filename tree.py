@@ -186,14 +186,19 @@ class IntentTree:
                 return False
         return True
 
-    def __str__(self, level: int = 0) -> str:
+    def __str__(
+        self, indent: str = "", is_last: bool = True, is_root: bool = True
+    ) -> str:
         string = (
-            "|   " * (level - 1)
-            + ("|___" if level != 0 else "")
+            indent
+            + (("└──" if is_last else "├──") if not is_root else "")
             + "[{} / {}]\n".format(str(self.node_type), self.tokens)
         )
+        indent += "   " if is_last else "│  "
         for child in self.children:
-            string += child.__str__(level=level + 1)
+            string += child.__str__(
+                indent=indent, is_last=child is self.children[-1], is_root=False
+            )
         return string
 
     @classmethod
