@@ -52,6 +52,7 @@ def train_(
 
             with torch.no_grad():
                 model.eval()
+                model.clear_tree_cache_()
                 pred_tree = model.make_tree(sequences, None)
             model.train()
             print("[debug]")
