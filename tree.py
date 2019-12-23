@@ -187,8 +187,11 @@ class IntentTree:
         return True
 
     def __str__(self, level: int = 0) -> str:
-        offset = "  " * level
-        string = offset + "+ {} | {}\n".format(str(self.node_type), self.tokens)
+        string = (
+            "|   " * (level - 1)
+            + ("|___" if level != 0 else "")
+            + "[{} / {}]\n".format(str(self.node_type), self.tokens)
+        )
         for child in self.children:
             string += child.__str__(level=level + 1)
         return string
