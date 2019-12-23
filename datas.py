@@ -38,7 +38,10 @@ class Dataset:
             batch_trees = self.trees[i * batch_size : (i + 1) * batch_size]
             yield (
                 torch.tensor(
-                    [self.tokenizer.encode(tree.tokens) for tree in batch_trees]
+                    [
+                        self.tokenizer.encode("[CLS] " + tree.tokens + " [SEP]")
+                        for tree in batch_trees
+                    ]
                 ),
                 batch_trees,
             )
