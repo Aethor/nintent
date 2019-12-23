@@ -72,14 +72,14 @@ class TreeScorer(torch.nn.Module):
         self.clear_tree_cache_()
 
     def clear_tree_cache_(self):
-        self.tree_cache: Mapping[int, IntentTree] = dict()
+        self.tree_cache: Mapping[str, IntentTree] = dict()
 
-    def _hash_tensor(self, t: torch.Tensor) -> int:
+    def _hash_tensor(self, t: torch.Tensor) -> str:
         """
         :param t: (n)
-        :return: a hash of the tensor converted as a tuple
+        :return: a string as a hash
         """
-        return hash((e.item() for e in t))
+        return " ".join([str(e.item()) for e in t])
 
     def forward(self, tree: IntentTree, device: torch.device) -> torch.Tensor:
         """
@@ -153,26 +153,24 @@ class TreeScorer(torch.nn.Module):
         tokens_hash = self._hash_tensor(tokens[0])
         if tokens_hash in self.tree_cache:
             return copy.deepcopy(self.tree_cache[tokens_hash])
-        else:
-            node_type = IntentTree.node_types[
-                torch.max(self.node_type_selector(span_repr), 1).indices.item()
-            ]
 
-            decoded_tokens = self.tokenizer.decode([t.item() for t in tokens[0]])
-            if node_type == Intent:
-                intent_type = torch.max(
-                    self.intent_type_selector(span_repr), 1
-                ).indices.item()
-                cur_tree = IntentTree(decoded_tokens, Intent(intent_type))
-            elif node_type == Slot:
-                slot_type = torch.max(
-                    self.slot_type_selector(span_repr), 1
-                ).indices.item()
-                cur_tree = IntentTree(decoded_tokens, Slot(slot_type))
-            elif node_type is None:
-                cur_tree = IntentTree(decoded_tokens, None)
+        node_type = IntentTree.node_types[
+            torch.max(self.node_type_selector(span_repr), 1).indices.item()
+        ]
 
-            self.tree_cache[tokens_hash] = cur_tree
+        decoded_tokens = self.tokenizer.decode([t.item() for t in tokens[0]])
+        if node_type == Intent:
+            intent_type = torch.max(
+                self.intent_type_selector(span_repr), 1
+            ).indices.item()
+            cur_tree = IntentTree(decoded_tokens, Intent(intent_type))
+        elif node_type == Slot:
+            slot_type = torch.max(self.slot_type_selector(span_repr), 1).indices.item()
+            cur_tree = IntentTree(decoded_tokens, Slot(slot_type))
+        elif node_type is None:
+            cur_tree = IntentTree(decoded_tokens, None)
+
+        self.tree_cache[tokens_hash] = cur_tree
 
         # Check if the current tree should be terminal
         if (

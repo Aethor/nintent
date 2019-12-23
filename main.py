@@ -56,17 +56,22 @@ def train_(
                 )
 
         # TODO: only possible batch size is 1
-        for sequences, target_trees in batches_progress:
+        for i, (sequences, target_trees) in enumerate(batches_progress):
             optimizer.zero_grad()
             sequences = sequences.to(device)
 
+            tqdm.write(f"example {i}")
+            tqdm.write(f"target tree")
+            tqdm.write(str(target_trees[0]))
             with torch.no_grad():
                 model.eval()
                 model.clear_tree_cache_()
                 pred_tree = model.make_tree(sequences, None)
+
+            tqdm.write("predicted tree")
+            tqdm.write(str(pred_tree))
+
             model.train()
-            print("[debug]")
-            print(pred_tree)
 
             if pred_tree == target_trees[0]:
                 mean_loss_list.append(0)
