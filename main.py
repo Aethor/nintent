@@ -4,7 +4,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 import argparse
-from typing import Optional
+from typing import Optional, List
 
 import torch
 from torch.optim.optimizer import Optimizer
@@ -19,9 +19,11 @@ from config import Config
 from model import TreeScorer
 
 
-def hinge_loss(pred_score: torch.Tensor, target_score: torch.Tensor) -> torch.Tensor:
+def hinge_loss(
+    pred_score: torch.Tensor, target_score: torch.Tensor
+) -> Optional[torch.Tensor]:
     if (1 - target_score + pred_score).item() <= 0:
-        return 0 * pred_score * target_score
+        return None
     return 1 - target_score + pred_score
 
 
@@ -45,6 +47,14 @@ def train_(
             dataset.batches(batch_size), total=dataset.batches_nb(batch_size)
         )
 
+        def update_progress_bar(epoch: int, mean_loss_list: List[float]):
+            if len(mean_loss_list) > 0:
+                batches_progress.set_description(
+                    "[epoch:{}][mean loss:{:2f}]".format(
+                        epoch + 1, sum(mean_loss_list) / len(mean_loss_list)
+                    )
+                )
+
         # TODO: only possible batch size is 1
         for sequences, target_trees in batches_progress:
             optimizer.zero_grad()
@@ -59,27 +69,26 @@ def train_(
             print(pred_tree)
 
             if pred_tree == target_trees[0]:
+                mean_loss_list.append(0)
+                update_progress_bar(epoch, mean_loss_list)
                 continue
 
             target_score = model(target_trees[0], device)
             pred_score = model(pred_tree, device)
 
             loss = hinge_loss(pred_score, target_score)
+            if loss is None:
+                mean_loss_list.append(0)
+                update_progress_bar(epoch, mean_loss_list)
+                continue
 
             loss.backward()
             optimizer.step()
 
-            if loss.item() != 0.0:
-                batches_progress.set_description(
-                    "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss.item())
-                )
             mean_loss_list.append(loss.item())
+            update_progress_bar(epoch, mean_loss_list)
 
-        if len(mean_loss_list) > 0:
-            mean_loss = sum(mean_loss_list) / len(mean_loss_list)
-            print(f"mean loss : {mean_loss}")
-        else:
-            print("[warning] mean loss cannot be reported")
+            mean_loss_list.append(loss.item())
 
         if not scheduler is None:
             scheduler.step()
