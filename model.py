@@ -81,6 +81,48 @@ class TreeScorer(torch.nn.Module):
         """
         return " ".join([str(e.item()) for e in t])
 
+    def new_train(
+        self,
+        tokens: torch.Tensor,
+        tokens_repr: Optional[torch.Tensor],
+        gold_tree: IntentTree,
+    ) -> (IntentTree, torch.Tensor):
+        """
+        :param tokens: (batch_size, seq_size)
+        :span_repr:    (batch_size, seq_size, hidden_size)
+        :return: (intent tree, loss)
+        """
+        self.train()
+        if tokens_repr is None:
+            # (batch_size, seq_size, hidden_size)
+            tokens_repr = self.span_encoder(tokens)
+        span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
+
+        loss = torch.tensor([0]).to(tokens.device)
+
+        raw_node_type = self.node_type_selector(span_repr)
+        node_type = IntentTree.node_types[torch.max(raw_node_type, 1).indices.item()]
+        loss += (
+            1
+            - torch.max(raw_node_type, 1).indices
+            + raw_node_type[IntentTree.node_types_idx(type(gold_tree.node_type))]
+        )
+        if node_type == Intent:
+            raw_intent_type = self.intent_type_selector(span_repr)
+            loss += (
+                1
+                - torch.max(raw_intent_type, 1).indices
+                + raw_intent_type[Intent.stoi(gold_tree.node_type)]
+            )
+        elif node_type == Slot:
+            raw_slot_type = self.slot_type_selector(span_repr)
+            loss += (
+                1
+                - torch.max(raw_slot_type, 1).indices
+                + raw_slot_type[Slot.stoi(gold_tree.node_type)]
+            )
+        # TODO: None type ?
+
     def forward(self, tree: IntentTree, device: torch.device) -> torch.Tensor:
         """
         :param tree:
