@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
+from transformers import BertTokenizer
 
 
 class Intent:
@@ -132,9 +133,11 @@ class Slot:
 class IntentTree:
 
     node_types: Mapping[int, Optional[Type]] = {0: None, 1: Intent, 2: Slot}
+    # TODO: refactor with new tokens format
+    tokenizer: BertTokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
     def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
-        self.tokens = tokens
+        self.tokens = IntentTree.tokenizer.encode(tokens)
         self.node_type = node_type
         self.children = []
 
