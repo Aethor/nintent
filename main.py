@@ -19,14 +19,6 @@ from config import Config
 from model import TreeScorer
 
 
-def hinge_loss(
-    pred_score: torch.Tensor, target_score: torch.Tensor
-) -> Optional[torch.Tensor]:
-    if (1 - target_score + pred_score).item() <= 0:
-        return None
-    return 1 - target_score + pred_score
-
-
 def train_(
     model: TreeScorer,
     dataset: Dataset,
@@ -44,59 +36,41 @@ def train_(
         mean_loss_list = []
 
         batches_progress = tqdm(
-            dataset.batches(batch_size), total=dataset.batches_nb(batch_size)
+            dataset.batches(batch_size, device), total=dataset.batches_nb(batch_size)
         )
 
-        def update_progress_bar(epoch: int, mean_loss_list: List[float]):
+        def update_progress_bar(epoch: int, loss: float):
             if len(mean_loss_list) > 0:
                 batches_progress.set_description(
-                    "[epoch:{}][mean loss:{:2f}]".format(
-                        epoch + 1, sum(mean_loss_list) / len(mean_loss_list)
-                    )
+                    "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss)
                 )
 
         # TODO: only possible batch size is 1
-        for i, (sequences, target_trees) in enumerate(batches_progress):
+        for i, target_trees in enumerate(batches_progress):
             optimizer.zero_grad()
-            sequences = sequences.to(device)
 
             tqdm.write(f"example {i}")
             tqdm.write(f"target tree")
             tqdm.write(str(target_trees[0]))
-            with torch.no_grad():
-                model.eval()
-                model.clear_tree_cache_()
-                pred_tree = model.make_tree(sequences, None)
 
-            tqdm.write("predicted tree")
-            tqdm.write(str(pred_tree))
+            loss = model(target_trees[0], device)
 
-            model.train()
-
-            if pred_tree == target_trees[0]:
-                mean_loss_list.append(0)
-                update_progress_bar(epoch, mean_loss_list)
-                continue
-
-            target_score = model(target_trees[0], device)
-            pred_score = model(pred_tree, device)
-
-            loss = hinge_loss(pred_score, target_score)
-            if loss is None:
-                mean_loss_list.append(0)
-                update_progress_bar(epoch, mean_loss_list)
+            if loss.grad_fn is None:
+                tqdm.write("skipped a tree")
                 continue
 
             loss.backward()
             optimizer.step()
 
             mean_loss_list.append(loss.item())
-            update_progress_bar(epoch, mean_loss_list)
+            update_progress_bar(epoch, loss.item())
 
             mean_loss_list.append(loss.item())
 
         if not scheduler is None:
             scheduler.step()
+
+        tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
 
     return model
 
@@ -132,6 +106,7 @@ if __name__ == "__main__":
         config.update_(vars(args))
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+    print("[info] loading datas...")
     dataset = Dataset.from_file("./datas/train.tsv", tokenizer)
     model = TreeScorer(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

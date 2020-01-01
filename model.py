@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Mapping
+from typing import Optional, List, Tuple, Union
 import copy
 
 import torch
@@ -62,83 +62,66 @@ class TreeScorer(torch.nn.Module):
 
         self.span_scorer = SpanScorer(self.hidden_size)
 
-        self.node_type_selector = Selector(self.hidden_size, IntentTree.node_types_nb())
+        self.is_slot_selector = Selector(self.hidden_size, 2)
+        self.is_intent_selector = Selector(self.hidden_size, 2)
         self.intent_type_selector = Selector(self.hidden_size, Intent.intent_types_nb())
         self.slot_type_selector = Selector(self.hidden_size, Slot.slot_types_nb())
 
-        # 1 reprensents positive class by convention
-        self.is_terminal_selector = Selector(self.hidden_size, 2)
-
-    def forward(
-        self,
-        tokens: torch.Tensor,
-        tokens_repr: Optional[torch.Tensor],
-        gold_tree: IntentTree,
-    ) -> (IntentTree, torch.Tensor):
+    def forward(self, gold_tree: IntentTree, device: torch.device,) -> torch.Tensor:
         """
-        :param tokens:      (batch_size, seq_size)
-        :param tokens_repr: (batch_size, seq_size, hidden_size)
+        :param tokens: (batch_size(1), seq_size)
+        :param tokens_repr: (batch_size(1), seq_size, hidden_size)
         :return: (intent tree, loss)
         """
-        self.train()
-        if tokens_repr is None:
-            # (batch_size, seq_size, hidden_size)
-            tokens_repr = self.span_encoder(tokens)
-        span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
-
-        loss = torch.tensor([0]).to(tokens.device)
-
-        node_type_pred = self.node_type_selector(span_repr)
-        node_type = IntentTree.node_types[torch.max(node_type_pred, 1).indices.item()]
-        loss += (
-            1
-            - torch.max(node_type_pred, 1).indices
-            + node_type_pred[IntentTree.node_types_idx(type(gold_tree.node_type))]
+        tokens = (
+            torch.tensor(IntentTree.tokenizer.encode(gold_tree.tokens))
+            .unsqueeze(0)
+            .to(device)
         )
-        if node_type == Intent:
-            intent_type_pred = self.intent_type_selector(span_repr)
-            loss += (
-                1
-                - torch.max(intent_type_pred, 1).indices
-                + intent_type_pred[Intent.stoi(gold_tree.node_type)]
-            )
-        elif node_type == Slot:
-            slot_type_pred = self.slot_type_selector(span_repr)
-            loss += (
-                1
-                - torch.max(slot_type_pred, 1).indices
-                + slot_type_pred[Slot.stoi(gold_tree.node_type)]
-            )
-        elif node_type is None:
-            # FIXME: check that
-            loss += 1
+        # (batch_size, seq_size, hidden_size)
+        tokens_repr = self.span_encoder(tokens)[:, 1:-1, :]
 
-        splits_nb = tokens.shape[1] - 1
-        best_split_score = torch.tensor([0])
-        for i in range(splits_nb):
-            l_span_score = self.span_scorer(
-                torch.cat((tokens_repr[:, i + 1, :], tokens_repr[:, -1, :]), dim=1)
-            )[0]
-            r_span_score = self.span_scorer(
-                torch.cat((tokens_repr[:, 0, :], tokens_repr[:, i + 1, :]), dim=1)
-            )[0]
-            split_score = l_span_score + r_span_score
-            if split_score > best_split_score:
-                best_split_score = split_score
+        loss = torch.tensor([0], dtype=torch.float).to(device)
 
-        # TODO: make trees have directly tensors ar tokens
-        gold_tree_tokens = gold_tree.tokens.unsqueeze(0).to(device)
-        gold_tree_split_score = torch.tensor([0])
-        for child in gold_tree.children:
-            gold_tree_split_tokens_repr = self.span_encoder(gold_tree_tokens)
-            gold_tree_split_span_repr = torch.cat(
-                (
-                    gold_tree_split_tokens_repr[:, 0, :],
-                    gold_tree_split_tokens_repr[:, -1, :],
-                )
-            )
-            gold_tree_split_score += self.span_scorer(gold_tree_split_span_repr)[0]
+        if type(gold_tree.node_type) == Intent:
 
-        loss += 1 - best_split_score + gold_tree_split_score
+            for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
+                for span_start in range(0, tokens_repr.shape[1] - span_size + 1):
 
-        # TODO: mechanism to know tree split points
+                    span_end = span_start + span_size - 1
+
+                    span_repr = torch.cat(
+                        (tokens_repr[:, span_start, :], tokens_repr[:, span_end, :]),
+                        dim=1,
+                    )
+                    is_slot_pred = self.is_slot_selector(span_repr)[0]
+                    is_slot = torch.max(is_slot_pred, 0).indices.item() == 1
+
+                if (span_start, span_end) in gold_tree.children_spans():
+                    loss += is_slot_pred[0]
+                else:
+                    loss += is_slot_pred[1]
+
+            for child in gold_tree.children:
+                loss += self(child, device,)
+
+        elif type(gold_tree.node_type) == Slot:
+            span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1,)
+            is_intent_pred = self.is_intent_selector(span_repr)[0]
+            is_intent = torch.max(is_intent_pred, 0).indices.item() == 1
+            if gold_tree.is_leaf():
+                loss += is_intent_pred[0]
+            else:
+                loss += is_intent_pred[1]
+
+            # FIXME:
+            assert len(gold_tree.children) <= 1
+
+            if gold_tree.is_leaf():
+                return loss
+
+            intent_node = gold_tree.children[0]
+            loss += self(intent_node, device,)
+
+        return loss
+

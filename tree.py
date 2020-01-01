@@ -1,6 +1,8 @@
 from __future__ import annotations
 from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
+
 from transformers import BertTokenizer
+import torch
 
 
 class Intent:
@@ -132,13 +134,23 @@ class Slot:
 
 class IntentTree:
 
-    node_types: Mapping[int, Optional[Type]] = {0: None, 1: Intent, 2: Slot}
-    # TODO: refactor with new tokens format
+    node_types: Mapping[int, Optional[Type]] = {0: Intent, 1: Slot}
     tokenizer: BertTokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
-    def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
-        self.tokens = IntentTree.tokenizer.encode(tokens)
+    def __init__(
+        self,
+        tokens: Union[str, List[str]],
+        node_type: Optional[Union[Intent, Slot]],
+        span_coords: Optional[List[int]] = None,
+    ):
+        if isinstance(tokens, str):
+            self.tokens: List[str] = IntentTree.tokenizer.tokenize(tokens)
+        elif isinstance(tokens, list):
+            self.tokens = tokens
+        else:
+            raise Exception(f"can't handle tokens type : {type(tokens)}")
         self.node_type = node_type
+        self.span_coords = span_coords
         self.children = []
 
     def add_child_(self, child: IntentTree):
@@ -148,21 +160,33 @@ class IntentTree:
         for child in children:
             self.add_child_(child)
 
+    def children_spans(self) -> List[Tuple[int]]:
+        return [child.span_coords for child in self.children]
+
     def is_leaf(self) -> bool:
         return len(self.children) == 0
 
     @classmethod
+    def tokens_as_tensor(
+        cls, tokens: Union[str, List[str]], device: Optional[torch.device]
+    ) -> torch.Tensor:
+        if device is None:
+            return torch.tensor(IntentTree.tokenizer.encode(tokens))
+        return torch.tensor(IntentTree.tokenizer.encode(tokens)).to(device)
+
+    @classmethod
     def from_str(cls, sent: str) -> IntentTree:
         stack: List[IntentTree] = []
+        token_idx = 0
 
         for token in sent.split():
 
             if token.startswith("["):
                 label, typ = token[1:].split(":")
                 if label == "IN":
-                    stack.append(IntentTree("", Intent(typ)))
+                    stack.append(IntentTree([], Intent(typ), [token_idx, token_idx]))
                 elif label == "SL":
-                    stack.append(IntentTree("", Slot(typ)))
+                    stack.append(IntentTree([], Slot(typ), [token_idx, token_idx]))
                 else:
                     raise Exception(f"Unknown node type : {label}")
                 if len(stack) >= 2:
@@ -172,8 +196,11 @@ class IntentTree:
                 last_popped = stack.pop()
 
             else:
+                tokens = IntentTree.tokenizer.tokenize(token)
+                token_idx += len(tokens)
                 for node in stack:
-                    node.tokens += f" {token}"
+                    node.tokens += tokens
+                    node.span_coords[1] += len(tokens)
 
         return last_popped
 
@@ -195,7 +222,9 @@ class IntentTree:
         string = (
             indent
             + (("└──" if is_last else "├──") if not is_root else "")
-            + "[{} / {}]\n".format(str(self.node_type), self.tokens)
+            + "[{} {}/ {}]\n".format(
+                str(self.node_type), str(self.span_coords), " ".join(self.tokens)
+            )
         )
         indent += "   " if is_last else "│  "
         for child in self.children:
