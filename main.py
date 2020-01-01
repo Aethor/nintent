@@ -4,6 +4,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 import argparse
+import random
 from typing import Optional, List
 
 import torch
@@ -13,7 +14,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 from transformers import BertTokenizer
 from tqdm import tqdm
 
-from tree import IntentTree
+from tree import IntentTree, Intent
 from datas import Dataset
 from config import Config
 from model import TreeScorer
@@ -28,7 +29,6 @@ def train_(
     epochs_nb: int,
     batch_size: int,
 ):
-    model.train()
     model.to(device)
 
     for epoch in range(epochs_nb):
@@ -47,16 +47,17 @@ def train_(
 
         # TODO: only possible batch size is 1
         for i, target_trees in enumerate(batches_progress):
+            model.train()
             optimizer.zero_grad()
 
-            tqdm.write(f"example {i}")
-            tqdm.write(f"target tree")
-            tqdm.write(str(target_trees[0]))
+            # tqdm.write(f"example {i}")
+            # tqdm.write(f"target tree")
+            # tqdm.write(str(target_trees[0]))
 
             loss = model(target_trees[0], device)
 
             if loss.grad_fn is None:
-                tqdm.write("skipped a tree")
+                tqdm.write("[warning] skipped a tree")
                 continue
 
             loss.backward()
@@ -69,6 +70,25 @@ def train_(
 
         if not scheduler is None:
             scheduler.step()
+
+        model.eval()
+        accuracy_list = list()
+        for valid_tree in dataset.valid_trees:
+            with torch.no_grad():
+                pred_tree = model.make_tree(valid_tree.tokens, device, Intent)
+            # TODO: Enhance
+            if random.random() < 0.01:
+                tqdm.write(str(pred_tree))
+            if pred_tree == valid_tree:
+                accuracy_list.append(1)
+            else:
+                accuracy_list.append(0)
+        if len(accuracy_list) > 0:
+            tqdm.write(
+                f"validation accuracy : {sum(accuracy_list) / len(accuracy_list)}"
+            )
+        else:
+            tqdm.write(f"validation accuracy cannot be displayed")
 
         tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
 
@@ -93,6 +113,13 @@ if __name__ == "__main__":
         help="Size of batches",
     )
     arg_parser.add_argument(
+        "-lr",
+        "--learning-rate",
+        type=float,
+        default=config["learning_rate"],
+        help="learning rate",
+    )
+    arg_parser.add_argument(
         "-cf",
         "--config-file",
         type=str,
@@ -107,10 +134,10 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     print("[info] loading datas...")
-    dataset = Dataset.from_file("./datas/train.tsv", tokenizer)
+    dataset = Dataset.from_file("./datas/train.tsv", 0.9)
     model = TreeScorer(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     train_(
         model,

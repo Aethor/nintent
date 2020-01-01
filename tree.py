@@ -222,7 +222,7 @@ class IntentTree:
         string = (
             indent
             + (("└──" if is_last else "├──") if not is_root else "")
-            + "[{} {}/ {}]\n".format(
+            + "[{}][{}][{}]\n".format(
                 str(self.node_type), str(self.span_coords), " ".join(self.tokens)
             )
         )
