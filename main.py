@@ -32,6 +32,10 @@ def train_(
 ):
     model.to(device)
 
+    intent_weights, slot_weights = train_dataset.class_weights()
+    intent_weights = torch.tensor(intent_weights).to(device)
+    slot_weights = torch.tensor(slot_weights).to(device)
+
     for epoch in range(epochs_nb):
 
         mean_loss_list = []
@@ -50,7 +54,7 @@ def train_(
             # tqdm.write(f"target tree")
             # tqdm.write(str(target_trees[0]))
 
-            loss = model(target_trees[0], device)
+            loss = model(target_trees[0], intent_weights, slot_weights, device)
 
             if loss.grad_fn is None:
                 tqdm.write("[warning] skipped a tree")

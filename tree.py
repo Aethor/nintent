@@ -207,10 +207,9 @@ class IntentTree:
 
     def flat(self) -> List[namedtuple]:
         FlatNode = namedtuple("FlatNode", ["node_type", "tokens", "span_coords"])
-        flat_node = FlatNode(self.node_type, self.tokens, self.span_coords)
-        cur_flat_tree = [flat_node]
+        cur_flat_tree = [FlatNode(self.node_type, self.tokens, self.span_coords)]
         for child in self.children:
-            cur_flat_tree.append(child.flat())
+            cur_flat_tree += child.flat()
         return cur_flat_tree
 
     def labeled_bracketing_similarity(self, other: IntentTree) -> Tuple[float]:

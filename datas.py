@@ -5,7 +5,7 @@ import torch
 from transformers import BertTokenizer
 from tqdm import tqdm
 
-from tree import IntentTree
+from tree import IntentTree, Intent, Slot
 
 
 class Dataset:
@@ -44,6 +44,26 @@ class Dataset:
                 datasets.append(Dataset.from_file(filename, usage_ratio))
 
         return tuple(datasets)
+
+    def class_weights(self) -> Tuple[List[float]]:
+        """
+        :return: intent_weights, slot_weights
+        """
+        intent_occ = [0] * Intent.intent_types_nb()
+        slot_occ = [0] * Slot.slot_types_nb()
+        for tree in self.trees:
+            for flat_node in tree.flat():
+                if type(flat_node.node_type) == Intent:
+                    intent_occ[Intent.stoi(flat_node.node_type.type)] += 1
+                elif type(flat_node.node_type) == Slot:
+                    slot_occ[Slot.stoi(flat_node.node_type.type)] += 1
+        max_intent_occ = max(intent_occ)
+        max_slot_occ = max(slot_occ)
+        intent_weights = [
+            (max_intent_occ / occ) if occ != 0 else 1 for occ in intent_occ
+        ]
+        slot_weights = [(max_slot_occ / occ) if occ != 0 else 1 for occ in slot_occ]
+        return intent_weights, slot_weights
 
     def batches_nb(self, batch_size):
         return len(self.trees) // batch_size
