@@ -85,10 +85,10 @@ def train_(
         )
         for pred_tree in pred_trees[:10]:
             tqdm.write(str(pred_tree))
-        tqdm.write(f"validation exact accuracy : {exact_accuracy}")
-        tqdm.write(f"validation labeled precision : {labeled_precision}")
-        tqdm.write(f"validation labeled recall : {labeled_recall}")
-        tqdm.write(f"validation labeled f1 : {labeled_f1}")
+        tqdm.write("validation exact accuracy : {:4f}".format(exact_accuracy))
+        tqdm.write("validation labeled precision : {:4f}".format(labeled_precision))
+        tqdm.write("validation labeled recall : {:4f}".format(labeled_recall))
+        tqdm.write("validation labeled f1 : {:4f}".format(labeled_f1))
 
         tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
 

@@ -100,7 +100,7 @@ class TreeScorer(torch.nn.Module):
             cur_tree = IntentTree(
                 tokens_str,
                 Intent(intent_type),
-                (0 + coords_offset, coords_offset + len(tokens_str)),
+                [0 + coords_offset, coords_offset + len(tokens_str)],
             )
 
             for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
