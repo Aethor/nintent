@@ -1,5 +1,9 @@
 from __future__ import annotations
 from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
+from collections import namedtuple
+
+from transformers import BertTokenizer
+import torch
 
 
 class Intent:
@@ -131,11 +135,23 @@ class Slot:
 
 class IntentTree:
 
-    node_types: Mapping[int, Optional[Type]] = {0: None, 1: Intent, 2: Slot}
+    node_types: Mapping[int, Optional[Type]] = {0: Intent, 1: Slot}
+    tokenizer: BertTokenizer = BertTokenizer.from_pretrained("bert-base-cased")
 
-    def __init__(self, tokens: str, node_type: Optional[Union[Intent, Slot]]):
-        self.tokens = tokens
+    def __init__(
+        self,
+        tokens: Union[str, List[str]],
+        node_type: Optional[Union[Intent, Slot]],
+        span_coords: Optional[List[int]] = None,
+    ):
+        if isinstance(tokens, str):
+            self.tokens: List[str] = IntentTree.tokenizer.tokenize(tokens)
+        elif isinstance(tokens, list):
+            self.tokens = tokens
+        else:
+            raise Exception(f"can't handle tokens type : {type(tokens)}")
         self.node_type = node_type
+        self.span_coords = span_coords
         self.children = []
 
     def add_child_(self, child: IntentTree):
@@ -145,21 +161,33 @@ class IntentTree:
         for child in children:
             self.add_child_(child)
 
+    def children_spans(self) -> List[Tuple[int]]:
+        return [child.span_coords for child in self.children]
+
     def is_leaf(self) -> bool:
         return len(self.children) == 0
 
     @classmethod
+    def tokens_as_tensor(
+        cls, tokens: Union[str, List[str]], device: Optional[torch.device]
+    ) -> torch.Tensor:
+        if device is None:
+            return torch.tensor(IntentTree.tokenizer.encode(tokens))
+        return torch.tensor(IntentTree.tokenizer.encode(tokens)).to(device)
+
+    @classmethod
     def from_str(cls, sent: str) -> IntentTree:
         stack: List[IntentTree] = []
+        token_idx = 0
 
         for token in sent.split():
 
             if token.startswith("["):
                 label, typ = token[1:].split(":")
                 if label == "IN":
-                    stack.append(IntentTree("", Intent(typ)))
+                    stack.append(IntentTree([], Intent(typ), [token_idx, token_idx]))
                 elif label == "SL":
-                    stack.append(IntentTree("", Slot(typ)))
+                    stack.append(IntentTree([], Slot(typ), [token_idx, token_idx]))
                 else:
                     raise Exception(f"Unknown node type : {label}")
                 if len(stack) >= 2:
@@ -169,10 +197,97 @@ class IntentTree:
                 last_popped = stack.pop()
 
             else:
+                tokens = IntentTree.tokenizer.tokenize(token)
+                token_idx += len(tokens)
                 for node in stack:
-                    node.tokens += f" {token}"
+                    node.tokens += tokens
+                    node.span_coords[1] += len(tokens)
 
         return last_popped
+
+    def flat(self) -> List[namedtuple]:
+        FlatNode = namedtuple("FlatNode", ["node_type", "tokens", "span_coords"])
+        flat_node = FlatNode(self.node_type, self.tokens, self.span_coords)
+        cur_flat_tree = [flat_node]
+        for child in self.children:
+            cur_flat_tree.append(child.flat())
+        return cur_flat_tree
+
+    def labeled_bracketing_similarity(self, other: IntentTree) -> Tuple[float]:
+        """
+        :param other: pred tree (self tree is considered as gold)
+        :return: precision, recall, F1
+        """
+        other_flat = other.flat()
+        self_flat = self.flat()
+
+        precision_list = list()
+        for flat_node in other_flat:
+            if flat_node in self_flat:
+                precision_list.append(1)
+            else:
+                precision_list.append(0)
+        if len(precision_list) > 0:
+            precision = sum(precision_list) / len(precision_list)
+        else:
+            precision = 0
+
+        recall_list = list()
+        for flat_node in self_flat:
+            if flat_node in other_flat:
+                recall_list.append(1)
+            else:
+                recall_list.append(0)
+        if len(recall_list) > 0:
+            recall = sum(recall_list) / len(recall_list)
+        else:
+            recall = 0
+
+        if precision + recall == 0:
+            return precision, recall, 0
+        f1 = 2 * (precision * recall) / (precision + recall)
+        return precision, recall, f1
+
+    @classmethod
+    def exact_accuracy_metric(
+        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
+    ) -> float:
+        if len(pred_trees) != len(gold_trees):
+            raise Exception
+        exact_accuracy_list = list()
+        for pred_tree, gold_tree in zip(pred_trees, gold_trees):
+            if pred_tree == gold_tree:
+                exact_accuracy_list.append(1)
+            else:
+                exact_accuracy_list.append(0)
+        if len(exact_accuracy_list) != 0:
+            return sum(exact_accuracy_list) / len(exact_accuracy_list)
+        else:
+            return 0
+
+    @classmethod
+    def labeled_bracketed_metric(
+        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
+    ) -> Tuple[float]:
+        if len(pred_trees) != len(gold_trees):
+            raise Exception
+        precision_list = list()
+        recall_list = list()
+        f1_list = list()
+
+        for pred_tree, gold_tree in zip(pred_trees, gold_trees):
+            precision, recall, f1 = gold_tree.labeled_bracketing_similarity(pred_tree)
+            precision_list.append(precision)
+            recall_list.append(recall)
+            f1_list.append(f1)
+
+        metrics = list()
+        for metric_list in [precision_list, recall_list, f1_list]:
+            if len(metric_list) > 0:
+                metrics.append(sum(metric_list) / len(metric_list))
+            else:
+                metric_list.append(0)
+        return tuple(metrics)
 
     def __eq__(self, other: IntentTree) -> bool:
         if not isinstance(other, IntentTree):
@@ -192,7 +307,9 @@ class IntentTree:
         string = (
             indent
             + (("└──" if is_last else "├──") if not is_root else "")
-            + "[{} / {}]\n".format(str(self.node_type), self.tokens)
+            + "[{}][{}][{}]\n".format(
+                str(self.node_type), str(self.span_coords), " ".join(self.tokens)
+            )
         )
         indent += "   " if is_last else "│  "
         for child in self.children:

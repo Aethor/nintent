@@ -1,4 +1,4 @@
-from typing import Optional, List, Tuple, Mapping
+from typing import Optional, List, Tuple, Union, Type
 import copy
 
 import torch
@@ -62,134 +62,165 @@ class TreeScorer(torch.nn.Module):
 
         self.span_scorer = SpanScorer(self.hidden_size)
 
-        self.node_type_selector = Selector(self.hidden_size, IntentTree.node_types_nb())
+        self.is_slot_selector = Selector(self.hidden_size, 2)
+        self.is_intent_selector = Selector(self.hidden_size, 2)
         self.intent_type_selector = Selector(self.hidden_size, Intent.intent_types_nb())
         self.slot_type_selector = Selector(self.hidden_size, Slot.slot_types_nb())
 
-        # 1 reprensents positive class by convention
-        self.is_terminal_selector = Selector(self.hidden_size, 2)
-
-        self.clear_tree_cache_()
-
-    def clear_tree_cache_(self):
-        self.tree_cache: Mapping[str, IntentTree] = dict()
-
-    def _hash_tensor(self, t: torch.Tensor) -> str:
+    def span_repr(self, span: torch.Tensor) -> torch.Tensor:
         """
-        :param t: (n)
-        :return: a string as a hash
+        :param span: (batch_size, seq_size, hidden_size)
+        :param coords: (batch_size, 2)
+        :return: (batch_size, 2, hidden_size)
         """
-        return " ".join([str(e.item()) for e in t])
+        return torch.cat((span[:, 0, :], span[:, -1, :]), dim=1)
 
-    def forward(self, tree: IntentTree, device: torch.device) -> torch.Tensor:
-        """
-        :param tree:
-        :return: (1)
-        """
-        # (batch_size, seq_size, hidden_size)
-        tokens_repr = self.span_encoder(
-            torch.tensor(self.tokenizer.encode(tree.tokens)).unsqueeze(0).to(device)
-        )
-        # (batch_size, 2, hidden_size)
-        span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
-
-        span_score = self.span_scorer(span_repr).squeeze()
-
-        node_type_score = self.node_type_selector(span_repr)[
-            0,
-            IntentTree.node_types_idx(
-                None if tree.node_type is None else type(tree.node_type)
-            ),
-        ].squeeze()
-
-        intent_type_score = torch.tensor(0, dtype=torch.float).to(device)
-        slot_type_score = torch.tensor(0, dtype=torch.float).to(device)
-        if type(tree.node_type) == Intent:
-            intent_type_score = self.intent_type_selector(span_repr)[
-                0, Intent.stoi(tree.node_type.type)
-            ].squeeze()
-        elif type(tree.node_type) == Slot:
-            slot_type_score = self.slot_type_selector(span_repr)[
-                0, Slot.stoi(tree.node_type.type)
-            ].squeeze()
-        elif tree.node_type is None:
-            pass
-        else:
-            raise Exception(f"unknown node type : {type(tree.node_type)}")
-
-        is_terminal_score = self.is_terminal_selector(span_repr)[
-            0, 1 if tree.is_leaf() else 0
-        ].squeeze()
-
-        children_score = torch.tensor(0, dtype=torch.float).to(device)
-        for child in tree.children:
-            children_score += self(child, device)
-
-        return (
-            span_score
-            + node_type_score
-            + intent_type_score
-            + slot_type_score
-            + is_terminal_score
-            + children_score
-        )
-
-    # TODO: enforce that level 0 should be an intent
-    # TODO: enforce tree correctness ??
     def make_tree(
-        self, tokens: torch.Tensor, tokens_repr: Optional[torch.Tensor]
+        self,
+        tokens_str: List[str],
+        device: torch.device,
+        cur_type: Type,
+        coords_offset: int = 0,
     ) -> IntentTree:
         """
-        :param tokens: (batch_size, seq_size)
-        :span_repr:    (batch_size, seq_size, hidden_size)
-        :note: only works with batch size equals to 1
         """
-        if tokens_repr is None:
-            # (batch_size, seq_size, hidden_size)
-            tokens_repr = self.span_encoder(tokens)
-        # (batch_size, 2, hidden_size)
-        span_repr = torch.cat((tokens_repr[:, 0, :], tokens_repr[:, -1, :]), dim=1)
-
-        tokens_hash = self._hash_tensor(tokens[0])
-        if tokens_hash in self.tree_cache:
-            return copy.deepcopy(self.tree_cache[tokens_hash])
-
-        node_type = IntentTree.node_types[
-            torch.max(self.node_type_selector(span_repr), 1).indices.item()
-        ]
-
-        decoded_tokens = self.tokenizer.decode([t.item() for t in tokens[0]])
-        if node_type == Intent:
-            intent_type = torch.max(
-                self.intent_type_selector(span_repr), 1
-            ).indices.item()
-            cur_tree = IntentTree(decoded_tokens, Intent(intent_type))
-        elif node_type == Slot:
-            slot_type = torch.max(self.slot_type_selector(span_repr), 1).indices.item()
-            cur_tree = IntentTree(decoded_tokens, Slot(slot_type))
-        elif node_type is None:
-            cur_tree = IntentTree(decoded_tokens, None)
-
-        self.tree_cache[tokens_hash] = cur_tree
-
-        # Check if the current tree should be terminal
-        if (
-            torch.max(self.is_terminal_selector(span_repr), 1).indices.item() == 1
-            or len(tokens[0]) == 1
-        ):
-            return cur_tree
-
-        children: List[Tuple[IntentTree]] = []
-        for i in range(tokens.shape[1] - 1):
-            ltree = self.make_tree(tokens[:, : i + 1], tokens_repr[:, : i + 1, :])
-            rtree = self.make_tree(tokens[:, i + 1 :], tokens_repr[:, i + 1 :, :])
-            children.append((ltree, rtree))
-
-        best_children_pair = max(
-            children,
-            key=lambda e: self(e[0], tokens.device) + self(e[1], tokens.device),
+        tokens = (
+            torch.tensor(IntentTree.tokenizer.encode(tokens_str))
+            .unsqueeze(0)
+            .to(device)
         )
+        tokens_repr = self.span_encoder(tokens)[:, 1:-1, :]
 
-        cur_tree.add_children_(best_children_pair)
+        if cur_type == Intent:
+            intent_type = Intent.itos(
+                torch.max(
+                    self.intent_type_selector(self.span_repr(tokens_repr)), 1
+                ).indices.item()
+            )
+            cur_tree = IntentTree(
+                tokens_str,
+                Intent(intent_type),
+                [0 + coords_offset, coords_offset + len(tokens_str)],
+            )
+
+            for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
+                for span_start in range(0, tokens_repr.shape[1] - span_size + 1):
+                    span_end = span_start + span_size
+
+                    is_overlapping = False
+                    for child_span in cur_tree.children_spans():
+                        if span_start >= child_span[0] and span_start < child_span[1]:
+                            is_overlapping = True
+                        if span_end > child_span[0] and span_end <= child_span[1]:
+                            is_overlapping = True
+                    if is_overlapping:
+                        continue
+
+                    span_repr = self.span_repr(tokens_repr[:, span_start:span_end, :])
+                    is_slot_pred = self.is_slot_selector(span_repr)[0]
+                    is_slot = torch.max(is_slot_pred, 0).indices.item() == 1
+
+                    if is_slot:
+                        cur_tree.add_child_(
+                            self.make_tree(
+                                tokens_str[span_start:span_end],
+                                device,
+                                Slot,
+                                coords_offset + span_start,
+                            )
+                        )
+
+        elif cur_type == Slot:
+            slot_type = Slot.itos(
+                torch.max(
+                    self.slot_type_selector(self.span_repr(tokens_repr)), 1
+                ).indices.item()
+            )
+            cur_tree = IntentTree(
+                tokens_str,
+                Slot(slot_type),
+                (0 + coords_offset, coords_offset + len(tokens_str)),
+            )
+            is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))[0]
+            is_intent = torch.max(is_intent_pred, 0).indices.item() == 1
+
+            if is_intent:
+                cur_tree.add_child_(
+                    self.make_tree(tokens_str, device, Intent, coords_offset)
+                )
 
         return cur_tree
+
+    def forward(self, gold_tree: IntentTree, device: torch.device) -> torch.Tensor:
+        """
+        :return: (intent tree, loss)
+        """
+        tokens = (
+            torch.tensor(IntentTree.tokenizer.encode(gold_tree.tokens))
+            .unsqueeze(0)
+            .to(device)
+        )
+        # (batch_size, seq_size, hidden_size)
+        tokens_repr = self.span_encoder(tokens)[:, 1:-1, :]
+
+        loss = torch.tensor([0], dtype=torch.float).to(device)
+
+        if type(gold_tree.node_type) == Intent:
+
+            intent_type_pred = self.intent_type_selector(self.span_repr(tokens_repr))[0]
+            intent_type_idx = torch.max(intent_type_pred, 0).indices.item()
+            gold_tree_intent_idx = Intent.stoi(gold_tree.node_type.type)
+            loss += (
+                intent_type_pred[intent_type_idx]
+                - intent_type_pred[gold_tree_intent_idx]
+            )
+
+            candidate_span_nb = sum(range(2, tokens_repr.shape[1] + 1))
+            span_loss = torch.tensor([0], dtype=torch.float).to(device)
+            for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
+                for span_start in range(0, tokens_repr.shape[1] - span_size + 1):
+                    span_end = span_start + span_size
+
+                    span_repr = self.span_repr(tokens_repr[:, span_start:span_end, :])
+                    is_slot_pred = self.is_slot_selector(span_repr)[0]
+                    is_slot = torch.max(is_slot_pred, 0).indices.item() == 1
+
+                if [span_start, span_end] in gold_tree.children_spans():
+                    # FIXME: experimental weight
+                    negative_weight = candidate_span_nb / len(
+                        gold_tree.children_spans()
+                    )
+                    span_loss += negative_weight * is_slot_pred[0]
+                else:
+                    span_loss += is_slot_pred[1]
+            if candidate_span_nb > 0:
+                loss += span_loss / candidate_span_nb
+
+            for child in gold_tree.children:
+                loss += self(child, device)
+
+        elif type(gold_tree.node_type) == Slot:
+
+            slot_type_pred = self.slot_type_selector(self.span_repr(tokens_repr))[0]
+            slot_type_idx = torch.max(slot_type_pred, 0).indices.item()
+            gold_tree_slot_idx = Slot.stoi(gold_tree.node_type.type)
+            loss += slot_type_pred[slot_type_idx] - slot_type_pred[gold_tree_slot_idx]
+
+            is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))[0]
+            is_intent = torch.max(is_intent_pred, 0).indices.item() == 1
+            if gold_tree.is_leaf():
+                loss += is_intent_pred[0]
+            else:
+                loss += is_intent_pred[1]
+
+            # FIXME:
+            assert len(gold_tree.children) <= 1
+
+            if gold_tree.is_leaf():
+                return loss
+
+            intent_node = gold_tree.children[0]
+            loss += self(intent_node, device)
+
+        return loss
+
