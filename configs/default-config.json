@@ -1,5 +1,8 @@
 {
     "epochs_nb": 5,
     "learning_rate": 1e-5,
-    "batch_size": 1
+    "batch_size": 1,
+    "train_datas_usage_ratio": 1,
+    "validation_datas_usage_ratio": 1,
+    "test_datas_usage_ratio": 1
 }

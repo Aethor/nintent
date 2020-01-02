@@ -120,6 +120,27 @@ if __name__ == "__main__":
         help="learning rate",
     )
     arg_parser.add_argument(
+        "-tdur",
+        "--train-datas-usage-ratio",
+        type=float,
+        default=config["train_datas_usage_ratio"],
+        help="train datas usage ratio (between 0 and 1)",
+    )
+    arg_parser.add_argument(
+        "-vdur",
+        "--validation-datas-usage-ratio",
+        type=float,
+        default=config["validation_datas_usage_ratio"],
+        help="validation datas usage ratio (between 0 and 1)",
+    )
+    arg_parser.add_argument(
+        "-edur",
+        "--test-datas-usage-ratio",
+        type=float,
+        default=config["test_datas_usage_ratio"],
+        help="test datas usage ratio (between 0 and 1)",
+    )
+    arg_parser.add_argument(
         "-cf",
         "--config-file",
         type=str,
@@ -135,7 +156,12 @@ if __name__ == "__main__":
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     print("[info] loading datas...")
     train_dataset, valid_dataset, test_dataset = Dataset.from_files(
-        ["./datas/train.tsv", "./datas/eval.tsv", "./datas/test.tsv"]
+        ["./datas/train.tsv", "./datas/eval.tsv", "./datas/test.tsv"],
+        [
+            config["train_datas_usage_ratio"],
+            config["validation_datas_usage_ratio"],
+            config["test_datas_usage_ratio"],
+        ],
     )
     model = TreeScorer(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
