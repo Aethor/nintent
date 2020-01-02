@@ -22,7 +22,8 @@ from model import TreeScorer
 
 def train_(
     model: TreeScorer,
-    dataset: Dataset,
+    train_dataset: Dataset,
+    valid_dataset: Dataset,
     device: torch.device,
     optimizer: Optimizer,
     scheduler: Optional[_LRScheduler],
@@ -36,7 +37,8 @@ def train_(
         mean_loss_list = []
 
         batches_progress = tqdm(
-            dataset.batches(batch_size, device), total=dataset.batches_nb(batch_size)
+            train_dataset.batches(batch_size, device),
+            total=train_dataset.batches_nb(batch_size),
         )
 
         def update_progress_bar(epoch: int, loss: float):
@@ -73,16 +75,18 @@ def train_(
 
         model.eval()
         pred_trees = list()
-        for valid_tree in dataset.valid_trees:
+        for valid_tree in valid_dataset.trees:
             with torch.no_grad():
                 pred_tree = model.make_tree(valid_tree.tokens, device, Intent)
                 pred_trees.append(pred_tree)
         exact_accuracy = IntentTree.exact_accuracy_metric(
-            pred_trees, dataset.valid_trees
+            pred_trees, valid_dataset.trees
         )
-        labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
-            pred_trees, dataset.valid_trees
-        )
+        (
+            labeled_precision,
+            labeled_recall,
+            labeled_f1,
+        ) = IntentTree.labeled_bracketed_metric(pred_trees, valid_dataset.trees)
         for pred_tree in pred_trees[:10]:
             tqdm.write(str(pred_tree))
         tqdm.write("validation exact accuracy : {:4f}".format(exact_accuracy))
@@ -134,14 +138,17 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     print("[info] loading datas...")
-    dataset = Dataset.from_file("./datas/train.tsv", 0.9)
+    train_dataset, valid_dataset, test_dataset = Dataset.from_files(
+        ["./datas/train.tsv", "./datas/eval.tsv", "./datas/test.tsv"]
+    )
     model = TreeScorer(tokenizer)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     train_(
         model,
-        dataset,
+        train_dataset,
+        valid_dataset,
         device,
         optimizer,
         None,  # scheduler,

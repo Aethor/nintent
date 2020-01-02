@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Generator
+from typing import List, Generator, Iterable, Tuple
 
 import torch
 from transformers import BertTokenizer
@@ -8,20 +8,29 @@ from tree import IntentTree
 
 
 class Dataset:
-    def __init__(self, trees: List[IntentTree], train_valid_ratio: float):
-        self.train_trees = trees[: int(train_valid_ratio * len(trees))]
-        self.valid_trees = trees[int(train_valid_ratio * len(trees)) :]
+    def __init__(self, trees: List[IntentTree]):
+        """
+        :param trees: a list of IntentTree
+        """
+        self.trees = trees
 
     @classmethod
-    def from_file(cls, filename: str, train_valid_ratio: float) -> Dataset:
+    def from_file(cls, filename: str) -> Dataset:
         trees = list()
         with open(filename) as f:
             for line in f:
                 trees.append(IntentTree.from_str(line.split("\t")[-1]))
-        return Dataset(trees, train_valid_ratio)
+        return Dataset(trees)
+
+    @classmethod
+    def from_files(cls, filenames: Iterable[str]) -> Tuple[Dataset]:
+        datasets = list()
+        for filename in filenames:
+            datasets.append(Dataset.from_file(filename))
+        return tuple(datasets)
 
     def batches_nb(self, batch_size):
-        return len(self.train_trees) // batch_size
+        return len(self.trees) // batch_size
 
     def pad(self, tensors: List[torch.Tensor], **kwargs) -> torch.Tensor:
         """
@@ -49,5 +58,5 @@ class Dataset:
         """
         batch_nb = self.batches_nb(batch_size)
         for i in range(batch_nb):
-            batch_trees = self.train_trees[i * batch_size : (i + 1) * batch_size]
+            batch_trees = self.trees[i * batch_size : (i + 1) * batch_size]
             yield batch_trees
