@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
+from collections import namedtuple
 
 from transformers import BertTokenizer
 import torch
@@ -203,6 +204,90 @@ class IntentTree:
                     node.span_coords[1] += len(tokens)
 
         return last_popped
+
+    def flat(self) -> List[namedtuple]:
+        FlatNode = namedtuple("FlatNode", ["node_type", "tokens", "span_coords"])
+        flat_node = FlatNode(self.node_type, self.tokens, self.span_coords)
+        cur_flat_tree = [flat_node]
+        for child in self.children:
+            cur_flat_tree.append(child.flat())
+        return cur_flat_tree
+
+    def labeled_bracketing_similarity(self, other: IntentTree) -> Tuple[float]:
+        """
+        :param other: pred tree (self tree is considered as gold)
+        :return: precision, recall, F1
+        """
+        other_flat = other.flat()
+        self_flat = self.flat()
+
+        precision_list = list()
+        for flat_node in other_flat:
+            if flat_node in self_flat:
+                precision_list.append(1)
+            else:
+                precision_list.append(0)
+        if len(precision_list) > 0:
+            precision = sum(precision_list) / len(precision_list)
+        else:
+            precision = 0
+
+        recall_list = list()
+        for flat_node in self_flat:
+            if flat_node in other_flat:
+                recall_list.append(1)
+            else:
+                recall_list.append(0)
+        if len(recall_list) > 0:
+            recall = sum(recall_list) / len(recall_list)
+        else:
+            recall = 0
+
+        if precision + recall == 0:
+            return precision, recall, 0
+        f1 = 2 * (precision * recall) / (precision + recall)
+        return precision, recall, f1
+
+    @classmethod
+    def exact_accuracy_metric(
+        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
+    ) -> float:
+        if len(pred_trees) != len(gold_trees):
+            raise Exception
+        exact_accuracy_list = list()
+        for pred_tree, gold_tree in zip(pred_trees, gold_trees):
+            if pred_tree == gold_tree:
+                exact_accuracy_list.append(1)
+            else:
+                exact_accuracy_list.append(0)
+        if len(exact_accuracy_list) != 0:
+            return sum(exact_accuracy_list) / len(exact_accuracy_list)
+        else:
+            return 0
+
+    @classmethod
+    def labeled_bracketed_metric(
+        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
+    ) -> Tuple[float]:
+        if len(pred_trees) != len(gold_trees):
+            raise Exception
+        precision_list = list()
+        recall_list = list()
+        f1_list = list()
+
+        for pred_tree, gold_tree in zip(pred_trees, gold_trees):
+            precision, recall, f1 = gold_tree.labeled_bracketing_similarity(pred_tree)
+            precision_list.append(precision)
+            recall_list.append(recall)
+            f1_list.append(f1)
+
+        metrics = list()
+        for metric_list in [precision_list, recall_list, f1_list]:
+            if len(metric_list) > 0:
+                metrics.append(sum(metric_list) / len(metric_list))
+            else:
+                metric_list.append(0)
+        return tuple(metrics)
 
     def __eq__(self, other: IntentTree) -> bool:
         if not isinstance(other, IntentTree):

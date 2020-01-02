@@ -8,9 +8,7 @@ from tree import IntentTree
 
 
 class Dataset:
-    def __init__(
-        self, trees: List[IntentTree], train_valid_ratio: float,
-    ):
+    def __init__(self, trees: List[IntentTree], train_valid_ratio: float):
         self.train_trees = trees[: int(train_valid_ratio * len(trees))]
         self.valid_trees = trees[int(train_valid_ratio * len(trees)) :]
 

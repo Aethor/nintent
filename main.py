@@ -72,23 +72,23 @@ def train_(
             scheduler.step()
 
         model.eval()
-        accuracy_list = list()
+        pred_trees = list()
         for valid_tree in dataset.valid_trees:
             with torch.no_grad():
                 pred_tree = model.make_tree(valid_tree.tokens, device, Intent)
-            # TODO: Enhance
-            if random.random() < 0.01:
-                tqdm.write(str(pred_tree))
-            if pred_tree == valid_tree:
-                accuracy_list.append(1)
-            else:
-                accuracy_list.append(0)
-        if len(accuracy_list) > 0:
-            tqdm.write(
-                f"validation accuracy : {sum(accuracy_list) / len(accuracy_list)}"
-            )
-        else:
-            tqdm.write(f"validation accuracy cannot be displayed")
+                pred_trees.append(pred_tree)
+        exact_accuracy = IntentTree.exact_accuracy_metric(
+            pred_trees, dataset.valid_trees
+        )
+        labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
+            pred_trees, dataset.valid_trees
+        )
+        for pred_tree in pred_trees[:10]:
+            tqdm.write(str(pred_tree))
+        tqdm.write(f"validation exact accuracy : {exact_accuracy}")
+        tqdm.write(f"validation labeled precision : {labeled_precision}")
+        tqdm.write(f"validation labeled recall : {labeled_recall}")
+        tqdm.write(f"validation labeled f1 : {labeled_f1}")
 
         tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
 

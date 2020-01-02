@@ -197,7 +197,7 @@ class TreeScorer(torch.nn.Module):
                 loss += span_loss / candidate_span_nb
 
             for child in gold_tree.children:
-                loss += self(child, device,)
+                loss += self(child, device)
 
         elif type(gold_tree.node_type) == Slot:
 
