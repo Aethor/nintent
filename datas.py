@@ -3,6 +3,7 @@ from typing import List, Generator, Iterable, Tuple
 
 import torch
 from transformers import BertTokenizer
+from tqdm import tqdm
 
 from tree import IntentTree
 
@@ -25,7 +26,7 @@ class Dataset:
     @classmethod
     def from_files(cls, filenames: Iterable[str]) -> Tuple[Dataset]:
         datasets = list()
-        for filename in filenames:
+        for filename in tqdm(filenames):
             datasets.append(Dataset.from_file(filename))
         return tuple(datasets)
 

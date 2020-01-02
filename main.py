@@ -41,12 +41,6 @@ def train_(
             total=train_dataset.batches_nb(batch_size),
         )
 
-        def update_progress_bar(epoch: int, loss: float):
-            if len(mean_loss_list) > 0:
-                batches_progress.set_description(
-                    "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss)
-                )
-
         # TODO: only possible batch size is 1
         for i, target_trees in enumerate(batches_progress):
             model.train()
@@ -66,7 +60,9 @@ def train_(
             optimizer.step()
 
             mean_loss_list.append(loss.item())
-            update_progress_bar(epoch, loss.item())
+            batches_progress.set_description(
+                "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss.item())
+            )
 
             mean_loss_list.append(loss.item())
 
@@ -75,7 +71,7 @@ def train_(
 
         model.eval()
         pred_trees = list()
-        for valid_tree in valid_dataset.trees:
+        for valid_tree in tqdm(valid_dataset.trees):
             with torch.no_grad():
                 pred_tree = model.make_tree(valid_tree.tokens, device, Intent)
                 pred_trees.append(pred_tree)
