@@ -42,19 +42,21 @@ class Selector(torch.nn.Module):
         return torch.softmax(self.selector(flat_span), dim=1)
 
 
-class TreeScorer(torch.nn.Module):
-    def __init__(self, tokenizer: BertTokenizer):
+class TreeMaker(torch.nn.Module):
+    def __init__(self, intent_weights: torch.Tensor, slot_weights: torch.Tensor):
         super().__init__()
-
-        self.tokenizer = tokenizer
 
         self.span_encoder = SpanEncoder()
         self.hidden_size = self.span_encoder.hidden_size
 
         self.is_slot_selector = Selector(self.hidden_size, 2)
         self.is_intent_selector = Selector(self.hidden_size, 2)
+
         self.intent_type_selector = Selector(self.hidden_size, Intent.intent_types_nb())
+        self.intent_type_loss = torch.nn.CrossEntropyLoss()
+
         self.slot_type_selector = Selector(self.hidden_size, Slot.slot_types_nb())
+        self.slot_type_loss = torch.nn.CrossEntropyLoss()
 
     def span_repr(self, span: torch.Tensor) -> torch.Tensor:
         """
@@ -151,13 +153,7 @@ class TreeScorer(torch.nn.Module):
 
         return cur_tree
 
-    def forward(
-        self,
-        gold_tree: IntentTree,
-        intent_weights: torch.Tensor,
-        slot_weights: torch.Tensor,
-        device: torch.device,
-    ) -> torch.Tensor:
+    def forward(self, gold_tree: IntentTree, device: torch.device,) -> torch.Tensor:
         """
         :return: (intent tree, loss)
         """
@@ -173,13 +169,11 @@ class TreeScorer(torch.nn.Module):
 
         if type(gold_tree.node_type) == Intent:
 
-            intent_type_pred = self.intent_type_selector(self.span_repr(tokens_repr))[0]
-            intent_type_idx = torch.max(intent_type_pred, 0).indices.item()
-            gold_tree_intent_idx = Intent.stoi(gold_tree.node_type.type)
-            loss += intent_weights[intent_type_idx] * (
-                intent_type_pred[intent_type_idx]
-                - intent_type_pred[gold_tree_intent_idx]
-            )
+            intent_type_pred = self.intent_type_selector(self.span_repr(tokens_repr))
+            gold_tree_intent_idx = torch.tensor(
+                [Intent.stoi(gold_tree.node_type.type)]
+            ).to(device)
+            loss += self.intent_type_loss(intent_type_pred, gold_tree_intent_idx)
 
             candidate_span_nb = sum(range(2, tokens_repr.shape[1] + 1))
             # FIXME: experimental weight
@@ -223,16 +217,16 @@ class TreeScorer(torch.nn.Module):
                 loss += span_loss / candidate_span_nb
 
             for child in gold_tree.children:
-                loss += self(child, intent_weights, slot_weights, device)
+                loss += self(child, device)
 
         elif type(gold_tree.node_type) == Slot:
 
-            slot_type_pred = self.slot_type_selector(self.span_repr(tokens_repr))[0]
-            slot_type_idx = torch.max(slot_type_pred, 0).indices.item()
-            gold_tree_slot_idx = Slot.stoi(gold_tree.node_type.type)
-            loss += slot_weights[slot_type_idx] * (
-                slot_type_pred[slot_type_idx] - slot_type_pred[gold_tree_slot_idx]
+            slot_type_pred = self.slot_type_selector(self.span_repr(tokens_repr))
+            gold_tree_slot_idx = torch.tensor([Slot.stoi(gold_tree.node_type.type)]).to(
+                device
             )
+            loss += self.slot_type_loss(slot_type_pred, gold_tree_slot_idx)
+            # )
 
             is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))[0]
             is_intent = torch.max(is_intent_pred, 0).indices.item() == 1
@@ -245,7 +239,7 @@ class TreeScorer(torch.nn.Module):
                 return loss
 
             intent_node = gold_tree.children[0]
-            loss += self(intent_node, intent_weights, slot_weights, device)
+            loss += self(intent_node, device)
 
         return loss
 

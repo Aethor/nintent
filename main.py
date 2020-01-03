@@ -17,30 +17,30 @@ from tqdm import tqdm
 from tree import IntentTree, Intent
 from datas import Dataset
 from config import Config
-from model import TreeScorer
+from model import TreeMaker
 
 
-def score(model: TreeScorer, dataset: Dataset, device: torch.device):
+def score(model: TreeMaker, trees: List[IntentTree], device: torch.device):
     model.eval()
     model.to(device)
 
     with torch.no_grad():
         pred_trees = [
-            model.make_tree(tree.tokens, device, Intent) for tree in tqdm(dataset.trees)
+            model.make_tree(tree.tokens, device, Intent) for tree in tqdm(trees)
         ]
-    for pred_tree in pred_trees[:10]:
+    for pred_tree in random.choices(pred_trees, k=10):
         tqdm.write(str(pred_tree))
 
-    exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, dataset.trees)
+    exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, trees)
     labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
-        pred_trees, dataset.trees
+        pred_trees, trees
     )
 
     return exact_accuracy, labeled_precision, labeled_recall, labeled_f1
 
 
 def train_(
-    model: TreeScorer,
+    model: TreeMaker,
     train_dataset: Dataset,
     valid_dataset: Dataset,
     device: torch.device,
@@ -50,10 +50,6 @@ def train_(
     batch_size: int,
 ):
     model.to(device)
-
-    intent_weights, slot_weights = train_dataset.class_weights()
-    intent_weights = torch.tensor(intent_weights).to(device)
-    slot_weights = torch.tensor(slot_weights).to(device)
 
     for epoch in range(epochs_nb):
 
@@ -73,7 +69,7 @@ def train_(
             # tqdm.write(f"target tree")
             # tqdm.write(str(target_trees[0]))
 
-            loss = model(target_trees[0], intent_weights, slot_weights, device)
+            loss = model(target_trees[0], device)
 
             if loss.grad_fn is None:
                 tqdm.write("[warning] skipped a tree")
@@ -93,9 +89,11 @@ def train_(
             scheduler.step()
 
         tqdm.write("scoring train trees...")
-        train_metrics = score(model, train_dataset, device)
+        train_metrics = score(
+            model, train_dataset.trees[: int(0.10 * len(train_dataset.trees))], device
+        )
         tqdm.write("scoring validation trees...")
-        valid_metrics = score(model, valid_dataset, device)
+        valid_metrics = score(model, valid_dataset.trees, device)
 
         tqdm.write("train exact accuracy : {:4f}".format(train_metrics[0]))
         tqdm.write("train labeled precision : {:4f}".format(train_metrics[1]))
@@ -180,8 +178,14 @@ if __name__ == "__main__":
             config["test_datas_usage_ratio"],
         ],
     )
-    model = TreeScorer(tokenizer)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    intent_weights, slot_weights = train_dataset.class_weights()
+    intent_weights = torch.tensor(intent_weights).to(device)
+    slot_weights = torch.tensor(slot_weights).to(device)
+
+    model = TreeMaker(intent_weights, slot_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     train_(
