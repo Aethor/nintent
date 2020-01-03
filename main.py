@@ -28,7 +28,7 @@ def score(model: TreeScorer, dataset: Dataset, device: torch.device):
         pred_trees = [
             model.make_tree(tree.tokens, device, Intent) for tree in tqdm(dataset.trees)
         ]
-    for pred_tree in pred_trees:
+    for pred_tree in pred_trees[:10]:
         tqdm.write(str(pred_tree))
 
     exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, dataset.trees)
