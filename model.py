@@ -2,7 +2,7 @@ from typing import Optional, List, Tuple, Union, Type
 import copy
 
 import torch
-from torch.nn.functional import binary_cross_entropy
+from torch.nn.functional import binary_cross_entropy, cross_entropy
 from transformers import BertModel, BertTokenizer
 
 from tree import IntentTree, Intent, Slot
@@ -223,12 +223,14 @@ class TreeMaker(torch.nn.Module):
             )
             loss += self.slot_type_loss(slot_type_pred, gold_tree_slot_idx)
 
-            is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))[0]
-            is_intent = torch.max(is_intent_pred, 0).indices.item() == 1
+            is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))
+            is_intent = torch.max(is_intent_pred[0], 0).indices.item() == 1
             if gold_tree.is_leaf():
-                loss += is_intent_pred[1]
+                target = torch.tensor([0]).to(device)
+                loss += cross_entropy(is_intent_pred, target)
             else:
-                loss += is_intent_pred[0]
+                target = torch.tensor([1]).to(device)
+                loss += cross_entropy(is_intent_pred, target)
 
             if gold_tree.is_leaf():
                 return loss
