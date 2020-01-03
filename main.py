@@ -20,6 +20,25 @@ from config import Config
 from model import TreeScorer
 
 
+def score(model: TreeScorer, dataset: Dataset, device: torch.device):
+    model.eval()
+    model.to(device)
+
+    with torch.no_grad():
+        pred_trees = [
+            model.make_tree(tree.tokens, device, Intent) for tree in tqdm(dataset.trees)
+        ]
+    for pred_tree in pred_trees:
+        tqdm.write(str(pred_tree))
+
+    exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, dataset.trees)
+    labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
+        pred_trees, dataset.trees
+    )
+
+    return exact_accuracy, labeled_precision, labeled_recall, labeled_f1
+
+
 def train_(
     model: TreeScorer,
     train_dataset: Dataset,
@@ -73,26 +92,20 @@ def train_(
         if not scheduler is None:
             scheduler.step()
 
-        model.eval()
-        pred_trees = list()
-        for valid_tree in tqdm(valid_dataset.trees):
-            with torch.no_grad():
-                pred_tree = model.make_tree(valid_tree.tokens, device, Intent)
-                pred_trees.append(pred_tree)
-        exact_accuracy = IntentTree.exact_accuracy_metric(
-            pred_trees, valid_dataset.trees
-        )
-        (
-            labeled_precision,
-            labeled_recall,
-            labeled_f1,
-        ) = IntentTree.labeled_bracketed_metric(pred_trees, valid_dataset.trees)
-        for pred_tree in pred_trees[:10]:
-            tqdm.write(str(pred_tree))
-        tqdm.write("validation exact accuracy : {:4f}".format(exact_accuracy))
-        tqdm.write("validation labeled precision : {:4f}".format(labeled_precision))
-        tqdm.write("validation labeled recall : {:4f}".format(labeled_recall))
-        tqdm.write("validation labeled f1 : {:4f}".format(labeled_f1))
+        tqdm.write("scoring train trees...")
+        train_metrics = score(model, train_dataset, device)
+        tqdm.write("scoring validation trees...")
+        valid_metrics = score(model, valid_dataset, device)
+
+        tqdm.write("train exact accuracy : {:4f}".format(train_metrics[0]))
+        tqdm.write("train labeled precision : {:4f}".format(train_metrics[1]))
+        tqdm.write("train labeled recall : {:4f}".format(train_metrics[2]))
+        tqdm.write("train labeled f1 : {:4f}".format(train_metrics[3]))
+
+        tqdm.write("validation exact accuracy : {:4f}".format(valid_metrics[0]))
+        tqdm.write("validation labeled precision : {:4f}".format(valid_metrics[1]))
+        tqdm.write("validation labeled recall : {:4f}".format(valid_metrics[2]))
+        tqdm.write("validation labeled f1 : {:4f}".format(valid_metrics[3]))
 
         tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
 
