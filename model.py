@@ -2,6 +2,7 @@ from typing import Optional, List, Tuple, Union, Type
 import copy
 
 import torch
+from torch.nn.functional import binary_cross_entropy
 from transformers import BertModel, BertTokenizer
 
 from tree import IntentTree, Intent, Slot
@@ -110,12 +111,20 @@ class TreeMaker(torch.nn.Module):
                                 (span_start, span_end), span_coords
                             ):
                                 overlapping_spans.append((span_coords, span_score))
-                        if all(
-                            [
-                                is_slot_pred[1] > overlapping_span[1]
-                                for overlapping_span in overlapping_spans
-                            ]
-                        ):
+                        mean_overlapping_score = (
+                            0
+                            if len(overlapping_spans) == 0
+                            else (
+                                sum(
+                                    [
+                                        overlapping_span[1]
+                                        for overlapping_span in overlapping_spans
+                                    ]
+                                )
+                                / len(overlapping_spans)
+                            )
+                        )
+                        if is_slot_pred[1] > mean_overlapping_score:
                             for overlapping_span in overlapping_spans:
                                 selected_spans.remove(overlapping_span)
                             selected_spans.append(
@@ -175,46 +184,33 @@ class TreeMaker(torch.nn.Module):
             ).to(device)
             loss += self.intent_type_loss(intent_type_pred, gold_tree_intent_idx)
 
-            candidate_span_nb = sum(range(2, tokens_repr.shape[1] + 1))
-            # FIXME: experimental weight
-            if len(gold_tree.children_spans()) > 0:
-                negative_weight = candidate_span_nb / len(gold_tree.children_spans())
-            span_loss = torch.tensor([0], dtype=torch.float).to(device)
-            selected_spans: List[Tuple[Tuple[int], float]] = list()
+            gold_spans = gold_tree.children_spans()
+            span_scores = []
+            gold_span_scores = []
             for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
                 for span_start in range(0, tokens_repr.shape[1] - span_size + 1):
                     span_end = span_start + span_size
 
                     span_repr = self.span_repr(tokens_repr[:, span_start:span_end, :])
                     is_slot_pred = self.is_slot_selector(span_repr)[0]
-                    is_slot = torch.max(is_slot_pred, 0).indices.item() == 1
 
-                    if is_slot:
-                        overlapping_spans = list()
-                        for span_coords, span_score in selected_spans:
-                            if are_spans_overlapping(
-                                (span_start, span_end), span_coords
-                            ):
-                                overlapping_spans.append((span_coords, span_score))
-                        if all(
-                            [
-                                is_slot_pred[1] > overlapping_span[1]
-                                for overlapping_span in overlapping_spans
-                            ]
-                        ):
-                            for overlapping_span in overlapping_spans:
-                                selected_spans.remove(overlapping_span)
-                            selected_spans.append(
-                                ((span_start, span_end), is_slot_pred[1])
-                            )
+                    span_scores.append(is_slot_pred[1])
 
-            for span in selected_spans:
-                if list(span[0]) in gold_tree.children_spans():
-                    span_loss += negative_weight * (1 - span[1])
-                else:
-                    span_loss += span[1]
-            if candidate_span_nb > 0:
-                loss += span_loss / candidate_span_nb
+                    if [span_start, span_end] in gold_spans:
+                        gold_span_scores.append(1)
+                    else:
+                        gold_span_scores.append(0)
+
+            if len(span_scores) > 0:
+                span_scores = (
+                    torch.tensor(span_scores, dtype=torch.float).to(device).unsqueeze(0)
+                )
+                gold_span_scores = (
+                    torch.tensor(gold_span_scores, dtype=torch.float)
+                    .to(device)
+                    .unsqueeze(0)
+                )
+                loss += binary_cross_entropy(span_scores, gold_span_scores)
 
             for child in gold_tree.children:
                 loss += self(child, device)
@@ -226,7 +222,6 @@ class TreeMaker(torch.nn.Module):
                 device
             )
             loss += self.slot_type_loss(slot_type_pred, gold_tree_slot_idx)
-            # )
 
             is_intent_pred = self.is_intent_selector(self.span_repr(tokens_repr))[0]
             is_intent = torch.max(is_intent_pred, 0).indices.item() == 1

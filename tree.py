@@ -161,7 +161,7 @@ class IntentTree:
         for child in children:
             self.add_child_(child)
 
-    def children_spans(self) -> List[Tuple[int]]:
+    def children_spans(self) -> List[List[int]]:
         return [child.span_coords for child in self.children]
 
     def is_leaf(self) -> bool:
