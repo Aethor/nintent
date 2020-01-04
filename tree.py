@@ -1,4 +1,3 @@
-from __future__ import annotations
 from typing import Union, Tuple, Optional, List, Type, Mapping, Iterable
 from collections import namedtuple
 
@@ -55,7 +54,7 @@ class Intent:
     def intent_types_nb(cls) -> int:
         return len(list(cls.intent_types))
 
-    def __eq__(self, other: Intent):
+    def __eq__(self, other):
         if not isinstance(other, Intent):
             return False
         return other.type == self.type
@@ -124,7 +123,7 @@ class Slot:
     def slot_types_nb(cls) -> int:
         return len(list(cls.slot_types))
 
-    def __eq__(self, other: Slot):
+    def __eq__(self, other):
         if not isinstance(other, Slot):
             return False
         return other.type == self.type
@@ -154,10 +153,10 @@ class IntentTree:
         self.span_coords = span_coords
         self.children = []
 
-    def add_child_(self, child: IntentTree):
+    def add_child_(self, child):
         self.children.append(child)
 
-    def add_children_(self, children: Iterable[IntentTree]):
+    def add_children_(self, children: Iterable):
         for child in children:
             self.add_child_(child)
 
@@ -176,8 +175,11 @@ class IntentTree:
         return torch.tensor(IntentTree.tokenizer.encode(tokens)).to(device)
 
     @classmethod
-    def from_str(cls, sent: str) -> IntentTree:
-        stack: List[IntentTree] = []
+    def from_str(cls, sent: str):
+        """
+        :return: an IntentTree
+        """
+        stack: List = []
         token_idx = 0
 
         for token in sent.split():
@@ -212,7 +214,7 @@ class IntentTree:
             cur_flat_tree += child.flat()
         return cur_flat_tree
 
-    def labeled_bracketing_similarity(self, other: IntentTree) -> Tuple[float]:
+    def labeled_bracketing_similarity(self, other) -> Tuple[float]:
         """
         :param other: pred tree (self tree is considered as gold)
         :return: precision, recall, F1
@@ -248,9 +250,7 @@ class IntentTree:
         return precision, recall, f1
 
     @classmethod
-    def exact_accuracy_metric(
-        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
-    ) -> float:
+    def exact_accuracy_metric(cls, pred_trees: List, gold_trees: List) -> float:
         if len(pred_trees) != len(gold_trees):
             raise Exception
         exact_accuracy_list = list()
@@ -266,7 +266,7 @@ class IntentTree:
 
     @classmethod
     def labeled_bracketed_metric(
-        cls, pred_trees: List[IntentTree], gold_trees: List[IntentTree]
+        cls, pred_trees: List, gold_trees: List
     ) -> Tuple[float]:
         if len(pred_trees) != len(gold_trees):
             raise Exception
@@ -288,7 +288,7 @@ class IntentTree:
                 metric_list.append(0)
         return tuple(metrics)
 
-    def __eq__(self, other: IntentTree) -> bool:
+    def __eq__(self, other) -> bool:
         if not isinstance(other, IntentTree):
             return False
         if len(self.children) != len(other.children):
