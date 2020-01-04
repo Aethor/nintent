@@ -72,7 +72,7 @@ def train_(
 
             mean_loss_list.append(loss.item())
             batches_progress.set_description(
-                "[epoch:{}][loss:{:2f}]".format(epoch + 1, loss.item())
+                "[epoch:{}][loss:{:10.4f}]".format(epoch + 1, loss.item())
             )
 
             mean_loss_list.append(loss.item())
@@ -87,17 +87,19 @@ def train_(
         tqdm.write("scoring validation trees...")
         valid_metrics = score(model, valid_dataset.trees, device)
 
-        tqdm.write("train exact accuracy : {:4f}".format(train_metrics[0]))
-        tqdm.write("train labeled precision : {:4f}".format(train_metrics[1]))
-        tqdm.write("train labeled recall : {:4f}".format(train_metrics[2]))
-        tqdm.write("train labeled f1 : {:4f}".format(train_metrics[3]))
+        tqdm.write("train exact accuracy : {:10.4f}".format(train_metrics[0]))
+        tqdm.write("train labeled precision : {:10.4f}".format(train_metrics[1]))
+        tqdm.write("train labeled recall : {:10.4f}".format(train_metrics[2]))
+        tqdm.write("train labeled f1 : {:10.4f}".format(train_metrics[3]))
 
-        tqdm.write("validation exact accuracy : {:4f}".format(valid_metrics[0]))
-        tqdm.write("validation labeled precision : {:4f}".format(valid_metrics[1]))
-        tqdm.write("validation labeled recall : {:4f}".format(valid_metrics[2]))
-        tqdm.write("validation labeled f1 : {:4f}".format(valid_metrics[3]))
+        tqdm.write("validation exact accuracy : {:10.4f}".format(valid_metrics[0]))
+        tqdm.write("validation labeled precision : {:10.4f}".format(valid_metrics[1]))
+        tqdm.write("validation labeled recall : {:10.4f}".format(valid_metrics[2]))
+        tqdm.write("validation labeled f1 : {:10.4f}".format(valid_metrics[3]))
 
-        tqdm.write(f"mean loss : {sum(mean_loss_list) / len(mean_loss_list)}")
+        tqdm.write(
+            "mean loss : {:10.4f}".format(sum(mean_loss_list) / len(mean_loss_list))
+        )
 
     return model
 
