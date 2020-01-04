@@ -1,4 +1,3 @@
-from __future__ import annotations
 from typing import List, Generator, Iterable, Tuple, Optional
 
 import torch
@@ -16,7 +15,10 @@ class Dataset:
         self.trees = trees
 
     @classmethod
-    def from_file(cls, filename: str, usage_ratio: Optional[float] = None) -> Dataset:
+    def from_file(cls, filename: str, usage_ratio: Optional[float] = None):
+        """
+        :return: a Dataset
+        """
         trees = list()
         with open(filename) as f:
             for i, _ in enumerate(f):
@@ -32,7 +34,10 @@ class Dataset:
     @classmethod
     def from_files(
         cls, filenames: Iterable[str], usage_ratios: Optional[List[float]] = None
-    ) -> Tuple[Dataset]:
+    ) -> Tuple:
+        """
+        :return: a Tuple of Dataset
+        """
         datasets = list()
         if usage_ratios is None:
             for filename in tqdm(filenames):
