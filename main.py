@@ -65,15 +65,7 @@ def train_(
             model.train()
             optimizer.zero_grad()
 
-            # tqdm.write(f"example {i}")
-            # tqdm.write(f"target tree")
-            # tqdm.write(str(target_trees[0]))
-
             loss = model(target_trees[0], device)
-
-            if loss.grad_fn is None:
-                tqdm.write("[warning] skipped a tree")
-                continue
 
             loss.backward()
             optimizer.step()
