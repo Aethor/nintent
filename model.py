@@ -9,8 +9,10 @@ from tree import IntentTree, Intent, Slot
 
 
 def are_spans_overlapping(span1, span2):
-    return (span1[0] >= span2[0] and span1[0] < span2[1]) or (
-        span1[1] > span2[0] and span1[1] <= span2[1]
+    return (
+        (span1[0] >= span2[0] and span1[0] < span2[1])
+        or (span1[1] > span2[0] and span1[1] <= span2[1])
+        or (span1[0] <= span2[0] and span1[1] >= span2[1])
     )
 
 
@@ -96,7 +98,7 @@ class TreeMaker(torch.nn.Module):
             )
 
             selected_spans: List[Tuple[Tuple[int], float]] = list()
-            for span_size in range(tokens_repr.shape[1] - 1, 0, -1):
+            for span_size in range(1, tokens_repr.shape[1]):
                 for span_start in range(0, tokens_repr.shape[1] - span_size + 1):
                     span_end = span_start + span_size
 
@@ -111,20 +113,10 @@ class TreeMaker(torch.nn.Module):
                                 (span_start, span_end), span_coords
                             ):
                                 overlapping_spans.append((span_coords, span_score))
-                        mean_overlapping_score = (
-                            0
-                            if len(overlapping_spans) == 0
-                            else (
-                                sum(
-                                    [
-                                        overlapping_span[1]
-                                        for overlapping_span in overlapping_spans
-                                    ]
-                                )
-                                / len(overlapping_spans)
-                            )
+                        min_overlapping_score = min(
+                            [s[1] for s in overlapping_spans], default=0
                         )
-                        if is_slot_pred[1] > mean_overlapping_score:
+                        if is_slot_pred[1] > min_overlapping_score:
                             for overlapping_span in overlapping_spans:
                                 selected_spans.remove(overlapping_span)
                             selected_spans.append(
