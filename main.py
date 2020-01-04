@@ -20,7 +20,12 @@ from config import Config
 from model import TreeMaker
 
 
-def score(model: TreeMaker, trees: List[IntentTree], device: torch.device):
+def score(
+    model: TreeMaker,
+    trees: List[IntentTree],
+    device: torch.device,
+    verbose: bool = False,
+):
     model.eval()
     model.to(device)
 
@@ -28,8 +33,9 @@ def score(model: TreeMaker, trees: List[IntentTree], device: torch.device):
         pred_trees = [
             model.make_tree(tree.tokens, device, Intent) for tree in tqdm(trees)
         ]
-    for pred_tree in random.choices(pred_trees, k=10):
-        tqdm.write(str(pred_tree))
+    if verbose:
+        for pred_tree in random.choices(pred_trees, k=10):
+            tqdm.write(str(pred_tree))
 
     exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, trees)
     labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
@@ -48,6 +54,7 @@ def train_(
     scheduler: Optional[_LRScheduler],
     epochs_nb: int,
     batch_size: int,
+    verbose: bool = False,
 ):
     model.to(device)
 
@@ -82,7 +89,10 @@ def train_(
 
         tqdm.write("scoring train trees...")
         train_metrics = score(
-            model, train_dataset.trees[: int(0.10 * len(train_dataset.trees))], device
+            model,
+            train_dataset.trees[: int(0.10 * len(train_dataset.trees))],
+            device,
+            verbose,
         )
         tqdm.write("scoring validation trees...")
         valid_metrics = score(model, valid_dataset.trees, device)
@@ -191,4 +201,6 @@ if __name__ == "__main__":
         None,  # scheduler,
         config["epochs_nb"],
         config["batch_size"],
+        True,
     )
+
