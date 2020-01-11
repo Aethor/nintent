@@ -35,6 +35,8 @@ We propose a novel algorithm for performing nested semantic parsing of an user q
 
 Our algorithm construct trees recursively from a top-down manner. Respecting such rules means that an alternation pattern has to be implemented : the top node is an intent, its children are slots, a potential slot child is an intent, this intent children are slots, _etc_... Therefor, we can divide our algorithm in two distinct stages.
 
+![Our parsing model](./assets/model.png)
+
 
 ## Intent Level
 
@@ -94,6 +96,8 @@ At te slot level, the loss is a sum of :
 ## Dataset
 
 To compare our work with _Gupta et al., 2017_, we use their proposed dataset. It is composed of 44783 user queries, with 25 intent types and 36 slot types. The dataset focus is on navigation, events and navigation to events. Trees in this dataset have a mean depth of 2.54, while user queries have a mean length of 8.93 tokens. 35% of trees have a depth of more than 2 (which indicates a nested query). The dataset is split into training, validation and testing set with 70:10:20 ratio.
+
+![Dataset statistics](./assets/dataset.png)
 
 
 ## Evaluation Metrics
