@@ -1,4 +1,4 @@
-from typing import List, Generator, Iterable, Tuple, Optional
+from typing import List, Generator, Iterable, Tuple, Optional, Mapping
 
 import torch
 from transformers import BertTokenizer
@@ -12,7 +12,9 @@ class Dataset:
         """
         :param trees: a list of IntentTree
         """
-        self.trees = trees
+        self.trees = [
+            tree for tree in trees if not tree.node_type.type.startswith("UN")
+        ]
 
     @classmethod
     def from_file(cls, filename: str, usage_ratio: Optional[float] = None):

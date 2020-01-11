@@ -272,20 +272,23 @@ class IntentTree:
             raise Exception
         precision_list = list()
         recall_list = list()
-        f1_list = list()
 
         for pred_tree, gold_tree in zip(pred_trees, gold_trees):
             precision, recall, f1 = gold_tree.labeled_bracketing_similarity(pred_tree)
             precision_list.append(precision)
             recall_list.append(recall)
-            f1_list.append(f1)
 
         metrics = list()
-        for metric_list in [precision_list, recall_list, f1_list]:
+        for metric_list in [precision_list, recall_list]:
             if len(metric_list) > 0:
                 metrics.append(sum(metric_list) / len(metric_list))
             else:
-                metric_list.append(0)
+                metrics.append(0)
+        if metrics[0] + metrics[1] != 0:
+            f1 = (2 * metrics[0] * metrics[1]) / (metrics[0] + metrics[1])
+        else:
+            f1 = 0
+        metrics.append(f1)
         return tuple(metrics)
 
     def __eq__(self, other) -> bool:

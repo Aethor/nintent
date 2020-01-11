@@ -31,7 +31,8 @@ def score(
 
     with torch.no_grad():
         pred_trees = [
-            model.make_tree(tree.tokens, device, Intent) for tree in tqdm(trees)
+            model.make_tree(tree.tokens, device, Intent, tree.span_coords)
+            for tree in tqdm(trees)
         ]
     if verbose:
         for pred_tree in random.choices(pred_trees, k=10):
@@ -72,7 +73,12 @@ def train_(
             model.train()
             optimizer.zero_grad()
 
-            loss = model(target_trees[0], device)
+            loss = model(
+                target_trees[0],
+                device,
+                target_trees[0].tokens,
+                target_trees[0].span_coords,
+            )
 
             loss.backward()
             optimizer.step()
@@ -81,8 +87,6 @@ def train_(
             batches_progress.set_description(
                 "[epoch:{}][loss:{:10.4f}]".format(epoch + 1, loss.item())
             )
-
-            mean_loss_list.append(loss.item())
 
         if not scheduler is None:
             scheduler.step()
@@ -95,7 +99,7 @@ def train_(
             verbose,
         )
         tqdm.write("scoring validation trees...")
-        valid_metrics = score(model, valid_dataset.trees, device)
+        valid_metrics = score(model, valid_dataset.trees, device, verbose)
 
         tqdm.write("train exact accuracy : {:10.4f}".format(train_metrics[0]))
         tqdm.write("train labeled precision : {:10.4f}".format(train_metrics[1]))
@@ -189,7 +193,7 @@ if __name__ == "__main__":
     intent_weights = torch.tensor(intent_weights).to(device)
     slot_weights = torch.tensor(slot_weights).to(device)
 
-    model = TreeMaker(intent_weights, slot_weights)
+    model = TreeMaker()
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     train_(
