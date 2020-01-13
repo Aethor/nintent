@@ -60,6 +60,7 @@ Our algorithm construct trees recursively from a top-down manner. Respecting suc
 
 ![Our parsing model](./assets/model.png)
 
+
 When the input of the algorithm is an intent (for example, at the top level), our algorithm performs two tasks :
 
 * Classifying the intent
@@ -117,7 +118,11 @@ When training, we do not follow the current model slot or intent choice when con
 
 To compare our work with _Gupta et al., 2018_, we use their proposed dataset. It is composed of 44783 user queries, with 25 intent types and 36 slot types. The dataset focus is on navigation, events and navigation to events. Trees in this dataset have a mean depth of 2.54, while user queries have a mean length of 8.93 tokens. 35% of trees have a depth of more than 2 (which indicates a nested query). The dataset is split into training, validation and testing set with 70:10:20 ratio.
 
-![Dataset statistics](./assets/dataset.png)
+\begin{figure*}
+	\includegraphics{./assets/dataset.png}
+	\caption{Dataset statistics}
+\end{figure*}
+
 
 
 ## Evaluation Metrics
@@ -126,6 +131,11 @@ Again, to compare our work with _Gupta et al. 2018_, we mainly use two metrics :
 
 * Exact accuracy : Exact accuracy is the ratio of predicted trees that are _exactly equals_ to gold trees. This is a very harsh metric.
 * Labeled Bracketing Precision, Recall and F1 : This metric is based of the number of spans correctly labeled. Labeled Bracketing Recall is based on the number of spans of the gold tree present and correctly labeled in the predicted tree, while Labeled Bracketing Precision is based on the number of correcty predicted spans labels of the predicted tree.
+
+
+## Experimental setup
+
+We implement our model using pytorch. We train our model for 15 epochs, with a learning rate of $1e-5$, using the Adam optimizer.
 
 
 ## Results
