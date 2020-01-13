@@ -126,10 +126,13 @@ class TreeMaker(torch.nn.Module):
                                 (span_start, span_end), span_coords
                             ):
                                 overlapping_spans.append((span_coords, span_score))
-                        max_overlapping_score = max(
-                            [s[1] for s in overlapping_spans], default=0
-                        )
-                        if is_slot_pred[1] > max_overlapping_score:
+                        if len(overlapping_spans) > 0:
+                            h_mean = len(overlapping_spans) / sum(
+                                [1 / s[1] for s in overlapping_spans]
+                            )
+                        else:
+                            h_mean = 0
+                        if is_slot_pred[1] > h_mean:
                             for overlapping_span in overlapping_spans:
                                 selected_spans.remove(overlapping_span)
                             selected_spans.append(
