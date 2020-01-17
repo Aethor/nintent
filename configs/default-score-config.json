@@ -1,0 +1,5 @@
+{
+    "test_datas_usage_ratio": 1,
+    "verbose": true,
+    "model_path": "./out/model.pth"
+}

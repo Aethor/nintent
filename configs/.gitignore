@@ -1,3 +1,4 @@
 *
 !.gitignore
-!default-config.json
+!default-train-config.json
+!default-score-config.json

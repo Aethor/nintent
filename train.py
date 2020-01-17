@@ -18,32 +18,7 @@ from tree import IntentTree, Intent
 from datas import Dataset
 from config import Config
 from model import TreeMaker
-
-
-def score(
-    model: TreeMaker,
-    trees: List[IntentTree],
-    device: torch.device,
-    verbose: bool = False,
-):
-    model.eval()
-    model.to(device)
-
-    with torch.no_grad():
-        pred_trees = [
-            model.make_tree(tree.tokens, device, Intent, tree.span_coords)
-            for tree in tqdm(trees)
-        ]
-    if verbose:
-        for pred_tree in random.choices(pred_trees, k=10):
-            tqdm.write(str(pred_tree))
-
-    exact_accuracy = IntentTree.exact_accuracy_metric(pred_trees, trees)
-    labeled_precision, labeled_recall, labeled_f1 = IntentTree.labeled_bracketed_metric(
-        pred_trees, trees
-    )
-
-    return exact_accuracy, labeled_precision, labeled_recall, labeled_f1
+from score import score
 
 
 def train_(
@@ -119,7 +94,8 @@ def train_(
 
 
 if __name__ == "__main__":
-    config = Config("./configs/default-config.json")
+
+    config = Config("./configs/default-train-config.json")
     arg_parser = argparse.ArgumentParser(argparse.ArgumentDefaultsHelpFormatter)
     arg_parser.add_argument(
         "-en",
@@ -157,18 +133,18 @@ if __name__ == "__main__":
         help="validation datas usage ratio (between 0 and 1)",
     )
     arg_parser.add_argument(
-        "-edur",
-        "--test-datas-usage-ratio",
-        type=float,
-        default=config["test_datas_usage_ratio"],
-        help="test datas usage ratio (between 0 and 1)",
+        "-mp",
+        "--model-path",
+        type=str,
+        default=config["model_path"],
+        help="path where the model will be saved",
     )
     arg_parser.add_argument(
         "-cf",
         "--config-file",
         type=str,
         default=None,
-        help="Config file overriding the default-config.json default config",
+        help="Config file overriding default-train-config.json",
     )
     args = arg_parser.parse_args()
     if args.config_file:
@@ -178,13 +154,9 @@ if __name__ == "__main__":
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
     print("[info] loading datas...")
-    train_dataset, valid_dataset, test_dataset = Dataset.from_files(
-        ["./datas/train.tsv", "./datas/eval.tsv", "./datas/test.tsv"],
-        [
-            config["train_datas_usage_ratio"],
-            config["validation_datas_usage_ratio"],
-            config["test_datas_usage_ratio"],
-        ],
+    train_dataset, valid_dataset = Dataset.from_files(
+        ["./datas/train.tsv", "./datas/eval.tsv"],
+        [config["train_datas_usage_ratio"], config["validation_datas_usage_ratio"]],
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -208,3 +180,4 @@ if __name__ == "__main__":
         True,
     )
 
+    torch.save(model.state_dict(), config["model_path"])
