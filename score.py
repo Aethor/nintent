@@ -8,7 +8,7 @@ import argparse
 import random
 
 import torch
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from tree import IntentTree, Intent
 from datas import Dataset

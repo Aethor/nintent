@@ -12,7 +12,7 @@ from torch.optim.optimizer import Optimizer
 from torch.nn.modules.loss import _Loss
 from torch.optim.lr_scheduler import _LRScheduler
 from transformers import BertTokenizer
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from tree import IntentTree, Intent
 from datas import Dataset
@@ -60,7 +60,7 @@ def train_(
 
             mean_loss_list.append(loss.item())
             batches_progress.set_description(
-                "[epoch:{}][loss:{:10.4f}]".format(epoch + 1, loss.item())
+                "[e:{}][l:{:10.4f}]".format(epoch + 1, loss.item())
             )
 
         if not scheduler is None:
